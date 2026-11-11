@@ -2,26 +2,27 @@
 
 Backend API for **Routiqo – Professional Fleet Dispatch & Route Optimization System**.
 
-Built with **Python 3.12+**, **Django 5.x / 6.x**, **Django REST Framework (DRF)**, and **PyMongo** directly connected to MongoDB.
+Built with **Python 3.12+**, **Django 5.x / 6.x**, **Django REST Framework (DRF)**, **psycopg 3**, and **PostgreSQL 16**.
 
 ---
 
 ## 🛠️ Tech Stack
 
 - **Framework**: Django & Django REST Framework (DRF)
-- **Database**: MongoDB (via PyMongo)
-- **Authentication**: Bearer Token Authentication (Sanctum-compatible sha256 tokens) & bcrypt password hashing
-- **Geocoding**: OpenStreetMap Nominatim
+- **Database**: PostgreSQL 16 (via psycopg 3 driver and Django ORM)
+- **Authentication**: Bearer Token Authentication (Sanctum-compatible sha256 tokens) & legacy bcrypt / PBKDF2 password hashing
+- **Geocoding**: OpenStreetMap Nominatim API
 - **Routing Engine**: Open Source Routing Machine (OSRM)
-- **Testing**: `pytest` & `pytest-django` with `mongomock`
+- **Testing**: `pytest` & `pytest-django` against PostgreSQL
 
 ---
 
 ## 🚀 Getting Started
 
-### 1. Prerequisites
+### 1. Prerequisites (Linux Mint / Ubuntu / Debian)
 - Python 3.12+
-- MongoDB instance (MongoDB Atlas or local running at `mongodb://localhost:27017`)
+- PostgreSQL 16 (or run via Docker Compose)
+- `libpq-dev` / `build-essential`
 
 ### 2. Virtual Environment Setup
 ```bash
@@ -37,30 +38,51 @@ pip install -r requirements.txt
 ```bash
 cp .env.example .env
 ```
-Ensure your MongoDB credentials, secret key, and CORS settings are configured in `.env`.
+Configure your PostgreSQL credentials, secret key, and CORS settings in `.env`:
+```env
+DB_ENGINE=django.db.backends.postgresql
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=routiqo
+DB_USER=routiqo_user
+DB_PASSWORD=routiqo_password
+```
 
 ### 4. Database Setup & Checks
 ```bash
-# Apply Django internal tables (for admin/sessions)
+# Verify database connectivity
+python manage.py check_db
+
+# Apply migrations
 python manage.py migrate
 
-# Validate setup
+# Validate Django configuration
 python manage.py check
 ```
 
-### 5. Start Backend Server
+### 5. Running the Development Server
 ```bash
 python manage.py runserver 0.0.0.0:8000
 ```
 
-Backend will be available at `http://localhost:8000`.
-
----
-
-## 🧪 Testing
-
-Run automated tests with isolated mock database:
+### 6. Running Tests
 ```bash
 pytest -v
 ```
-All 31 unit and integration tests run without requiring live network access to MongoDB or external routing servers.
+
+---
+
+## 📦 Optional MongoDB Atlas Data Migration
+
+To import existing data from a legacy MongoDB Atlas cluster into your PostgreSQL database:
+
+```bash
+export MONGODB_URI="mongodb+srv://user:pass@cluster.mongodb.net/logiroute"
+export MONGODB_DATABASE="logiroute"
+
+# Preview records without writing (dry run)
+python scripts/migrate_from_mongo.py --dry-run
+
+# Perform migration (idempotent, skips duplicates)
+python scripts/migrate_from_mongo.py --skip-existing
+```

@@ -1,6 +1,6 @@
 import logging
 from django.conf import settings
-from pymongo.errors import PyMongoError
+from django.db import DatabaseError
 from rest_framework.views import exception_handler
 from rest_framework.response import Response
 from rest_framework import status
@@ -34,7 +34,7 @@ def custom_exception_handler(exc, context):
                         errors[field] = [val.get('message', str(val))]
                     else:
                         errors[field] = [str(val)]
-                
+
                 # Extract first error message
                 for field, msg_list in errors.items():
                     if msg_list:
@@ -82,9 +82,9 @@ def custom_exception_handler(exc, context):
             }
             response.status_code = status.HTTP_403_FORBIDDEN
 
-    elif isinstance(exc, PyMongoError):
-        logger.error(f"MongoDB database error: {exc}", exc_info=True)
-        msg = "Database connection error. Please verify MongoDB Atlas credentials and network access list."
+    elif isinstance(exc, DatabaseError):
+        logger.error(f"Database error: {exc}", exc_info=True)
+        msg = "Database connection or query error. Please verify PostgreSQL connection."
         detail = str(exc) if getattr(settings, 'DEBUG', False) else msg
         response = Response(
             {

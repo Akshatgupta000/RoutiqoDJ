@@ -4,40 +4,52 @@ import uuid
 from typing import Any, Dict, List, Optional
 import requests
 from django.conf import settings
+from django.utils import timezone
 from rest_framework.exceptions import NotFound, ValidationError
 
-from core.database import db, now_utc, id_query, to_object_id
 from core.helpers import DistanceHelper, RouteOptimizer, RouteTimingCalculator, get_priority_rank
 from core.serializers import format_route_optimization
+from apps.routes.models import Route, RouteStop
+from apps.orders.models import Order
+from apps.vehicles.models import Vehicle
+from apps.centers.models import DeliveryCenter
+from apps.orders.services import parse_date
 
 
 SERVICE_SECONDS_PER_STOP = 180
 
 
-def list_routes(user_id: str) -> List[Dict[str, Any]]:
-    docs = list(db.routes.find({'user_id': str(user_id)}).sort('_id', -1))
-    return [format_route_optimization(r) for r in docs]
+def list_routes(user_id: Any) -> List[Dict[str, Any]]:
+    routes = Route.objects.filter(user_id=user_id).select_related(
+        'delivery_center', 'vehicle'
+    ).prefetch_related('stops__order').order_by('-id')
+    return [format_route_optimization(r) for r in routes]
 
 
-def get_route_by_id(user_id: str, route_id: str) -> Optional[Dict[str, Any]]:
-    q = id_query(route_id)
-    q['user_id'] = str(user_id)
-    route = db.routes.find_one(q)
-    if not route:
+def get_route_by_id(user_id: Any, route_id: Any) -> Optional[Dict[str, Any]]:
+    try:
+        route = Route.objects.filter(id=route_id, user_id=user_id).select_related(
+            'delivery_center', 'vehicle'
+        ).prefetch_related('stops__order').first()
+        if not route:
+            return None
+        return format_route_optimization(route)
+    except (ValueError, TypeError):
         return None
-    return format_route_optimization(route)
 
 
-def fetch_geometry(center: Dict[str, Any], stops: List[Dict[str, Any]]) -> List[List[float]]:
+def fetch_geometry(center: Any, stops: List[Dict[str, Any]]) -> List[List[float]]:
     if not stops:
         return []
 
-    center_lat = float(center['latitude'])
-    center_lon = float(center['longitude'])
+    center_lat = float(center.latitude if hasattr(center, 'latitude') else center['latitude'])
+    center_lon = float(center.longitude if hasattr(center, 'longitude') else center['longitude'])
 
     coords_list = [f"{center_lon},{center_lat}"]
     for s in stops:
-        coords_list.append(f"{float(s['longitude'])},{float(s['latitude'])}")
+        s_lon = float(s.get('longitude', 0.0))
+        s_lat = float(s.get('latitude', 0.0))
+        coords_list.append(f"{s_lon},{s_lat}")
     coords_list.append(f"{center_lon},{center_lat}")
 
     points_str = ';'.join(coords_list)
@@ -64,24 +76,20 @@ def fetch_geometry(center: Dict[str, Any], stops: List[Dict[str, Any]]) -> List[
 
 def cluster_orders_by_vehicle_capacity(
     orders: List[Dict[str, Any]],
-    vehicles: List[Dict[str, Any]],
+    vehicles: List[Vehicle],
     depot_lat: float,
     depot_lon: float,
 ) -> Dict[str, List[Dict[str, Any]]]:
-    # Match Laravel sort:
-    # 1. priority rank desc
-    # 2. angle atan2(lat - depot_lat, lon - depot_lon) asc
-    # 3. id asc
     def order_sort_key(o: Dict[str, Any]):
         p_rank = get_priority_rank(o.get('priority'))
         lat = float(o.get('latitude', 0.0))
         lon = float(o.get('longitude', 0.0))
         angle = math.atan2(lat - depot_lat, lon - depot_lon)
-        oid = str(o.get('id', o.get('_id', '')))
+        oid = str(o.get('id', ''))
         return (-p_rank, angle, oid)
 
     sorted_orders = sorted(orders, key=order_sort_key)
-    sorted_vehicles = sorted(vehicles, key=lambda v: str(v.get('id', v.get('_id', ''))))
+    sorted_vehicles = sorted(vehicles, key=lambda v: str(v.id))
 
     buckets: Dict[str, List[Dict[str, Any]]] = {}
     cursor = 0
@@ -89,7 +97,7 @@ def cluster_orders_by_vehicle_capacity(
     total_vehicles = len(sorted_vehicles)
 
     for index, vehicle in enumerate(sorted_vehicles):
-        v_id_str = str(vehicle['_id'])
+        v_id_str = str(vehicle.id)
         remaining_orders = total_orders - cursor
         if remaining_orders <= 0:
             buckets[v_id_str] = []
@@ -97,105 +105,91 @@ def cluster_orders_by_vehicle_capacity(
 
         remaining_vehicles = total_vehicles - index
         fair_share = math.ceil(remaining_orders / remaining_vehicles)
-        capacity = int(vehicle.get('capacity', 100))
+        capacity = int(vehicle.capacity or 100)
         take = min(fair_share, capacity, remaining_orders)
 
-        slice_orders = sorted_orders[cursor : cursor + take]
+        slice_orders = sorted_orders[cursor: cursor + take]
         cursor += len(slice_orders)
         buckets[v_id_str] = slice_orders
 
     return buckets
 
 
-def clear_planned_routes_internal(user_id: str, center_id: Any) -> None:
-    c_str = str(center_id)
-    planned_routes = list(db.routes.find({
-        'user_id': str(user_id),
-        'status': 'planned',
-        '$or': [{'delivery_center_id': c_str}, {'delivery_center_id': to_object_id(c_str)}]
-    }))
+def clear_planned_routes_internal(user_id: Any, center_id: Any) -> None:
+    planned_routes = Route.objects.filter(
+        user_id=user_id,
+        delivery_center_id=center_id,
+        status=Route.STATUS_PLANNED
+    )
 
     for route in planned_routes:
-        r_id = str(route['_id'])
-        stops = list(db.route_stops.find({'route_id': r_id}))
-        order_ids = [s.get('order_id') for s in stops if s.get('order_id')]
-
+        stops = RouteStop.objects.filter(route=route).exclude(order__isnull=True)
+        order_ids = [s.order_id for s in stops]
         if order_ids:
-            # Unassign from vehicle and revert to pending if not delivered
-            db.orders.update_many(
-                {
-                    'user_id': str(user_id),
-                    'status': {'$ne': 'delivered'},
-                    '$or': [
-                        {'_id': {'$in': [to_object_id(oid) for oid in order_ids]}},
-                        {'_id': {'$in': [str(oid) for oid in order_ids]}},
-                    ]
-                },
-                {'$set': {'vehicle_id': None, 'status': 'pending', 'updated_at': now_utc()}}
+            Order.objects.filter(
+                id__in=order_ids,
+                user_id=user_id
+            ).exclude(status=Order.STATUS_DELIVERED).update(
+                vehicle=None,
+                status=Order.STATUS_PENDING
             )
 
-        v_id = route.get('vehicle_id')
-        if v_id:
-            db.vehicles.update_one(id_query(v_id), {'$set': {'current_load': 0, 'updated_at': now_utc()}})
+        if route.vehicle_id:
+            Vehicle.objects.filter(id=route.vehicle_id).update(current_load=0)
 
-        db.route_stops.delete_many({'route_id': r_id})
-        db.routes.delete_one({'_id': route['_id']})
+        route.delete()
 
 
-def capture_nearby_orders(user_id: str, center: Dict[str, Any], radius_km: float = 10.0, date: Optional[str] = None) -> None:
-    center_id_str = str(center['_id'])
-    c_lat = float(center['latitude'])
-    c_lon = float(center['longitude'])
+def capture_nearby_orders(user_id: Any, center: DeliveryCenter, radius_km: float = 10.0, date: Optional[str] = None) -> None:
+    c_lat = float(center.latitude)
+    c_lon = float(center.longitude)
 
-    # Find pending/assigned orders without delivery_center_id (including orphans)
-    candidates = list(db.orders.find({
-        'user_id': str(user_id),
-        'status': {'$in': ['pending', 'assigned']},
-        'delivery_center_id': None,
-    }))
+    candidates = Order.objects.filter(
+        user_id=user_id,
+        status__in=[Order.STATUS_PENDING, Order.STATUS_ASSIGNED],
+        delivery_center__isnull=True,
+    )
+
+    parsed_d = parse_date(date) if date else None
 
     for order in candidates:
-        o_lat = float(order.get('latitude', 0.0))
-        o_lon = float(order.get('longitude', 0.0))
+        o_lat = float(order.latitude)
+        o_lon = float(order.longitude)
         dist = DistanceHelper.km_between(o_lat, o_lon, c_lat, c_lon)
 
         if dist <= radius_km:
-            # Don't capture if in an in-progress route
-            if order.get('status') == 'assigned':
-                in_prog_stop = db.route_stops.find_one({'order_id': str(order['_id'])})
+            if order.status == Order.STATUS_ASSIGNED:
+                in_prog_stop = RouteStop.objects.filter(
+                    order=order,
+                    route__status=Route.STATUS_IN_PROGRESS
+                ).exists()
                 if in_prog_stop:
-                    in_prog_route = db.routes.find_one({'_id': to_object_id(in_prog_stop.get('route_id')), 'status': 'in_progress'})
-                    if in_prog_route:
-                        continue
+                    continue
 
-            updates: Dict[str, Any] = {
-                'delivery_center_id': center_id_str,
-                'status': 'pending',
-                'vehicle_id': None,
-                'updated_at': now_utc(),
-            }
-            if date:
-                updates['delivery_date'] = date[:10]
-
-            db.orders.update_one({'_id': order['_id']}, {'$set': updates})
+            order.delivery_center = center
+            order.status = Order.STATUS_PENDING
+            order.vehicle = None
+            if parsed_d:
+                order.delivery_date = parsed_d
+            order.save()
 
 
 def persist_optimized_route(
-    user_id: str,
-    center: Dict[str, Any],
-    vehicle: Dict[str, Any],
+    user_id: Any,
+    center: DeliveryCenter,
+    vehicle: Vehicle,
     ordered_stops: List[Dict[str, Any]],
     departure_at: datetime.datetime,
     profile: str,
     comparison_batch_id: str,
     geometry: Optional[List[List[float]]] = None,
 ) -> Dict[str, Any]:
-    c_lat = float(center['latitude'])
-    c_lon = float(center['longitude'])
+    c_lat = float(center.latitude)
+    c_lon = float(center.longitude)
     optimizer = RouteOptimizer(c_lat, c_lon)
     distance_km = optimizer.tour_distance_km(ordered_stops)
 
-    v_speed = float(vehicle.get('average_speed', 25.0))
+    v_speed = float(vehicle.average_speed or 25.0)
     timing = RouteTimingCalculator().compute(
         departure=departure_at,
         ordered_stops=ordered_stops,
@@ -208,126 +202,111 @@ def persist_optimized_route(
     if geometry is None:
         geometry = fetch_geometry(center, ordered_stops)
 
-    route_doc = {
-        'user_id': str(user_id),
-        'delivery_center_id': str(center['_id']),
-        'vehicle_id': str(vehicle['_id']),
-        'comparison_batch_id': comparison_batch_id,
-        'optimization_profile': profile,
-        'total_distance': round(distance_km, 3),
-        'total_time': int(timing['total_seconds']),
-        'status': 'planned',
-        'next_stop_sequence': None,
-        'departure_at': departure_at,
-        'geometry': geometry,
-        'created_at': now_utc(),
-        'updated_at': now_utc(),
-    }
-    r_res = db.routes.insert_one(route_doc)
-    route_doc['_id'] = r_res.inserted_id
-    r_id_str = str(route_doc['_id'])
+    route = Route.objects.create(
+        user_id=user_id,
+        delivery_center=center,
+        vehicle=vehicle,
+        comparison_batch_id=comparison_batch_id,
+        profile=profile,
+        total_distance_km=round(distance_km, 3),
+        total_duration_min=round(float(timing['total_seconds']) / 60.0, 2),
+        total_stops=len(ordered_stops),
+        status=Route.STATUS_PLANNED,
+        departure_at=departure_at,
+        geometry=geometry,
+    )
 
-    stops_docs = []
-    for index, order in enumerate(ordered_stops):
+    stop_objects = []
+    order_ids_to_assign = []
+    for index, order_dict in enumerate(ordered_stops):
         leg_km = timing['leg_distances_km'][index] if index < len(timing['leg_distances_km']) else 0.0
         eta = timing['etas'][index] if index < len(timing['etas']) else None
 
-        stop_doc = {
-            'route_id': r_id_str,
-            'order_id': str(order['_id']),
-            'sequence': index + 1,
-            'distance_from_previous': round(float(leg_km), 3),
-            'estimated_arrival_time': eta,
-            'created_at': now_utc(),
-            'updated_at': now_utc(),
-        }
-        db.route_stops.insert_one(stop_doc)
-        stops_docs.append(stop_doc)
+        o_id = int(order_dict['id'])
+        order_ids_to_assign.append(o_id)
 
-        db.orders.update_one(
-            {'_id': order['_id']},
-            {
-                '$set': {
-                    'status': 'assigned',
-                    'vehicle_id': str(vehicle['_id']),
-                    'updated_at': now_utc(),
-                }
-            }
+        stop_objects.append(
+            RouteStop(
+                route=route,
+                order_id=o_id,
+                stop_index=index + 1,
+                latitude=order_dict['latitude'],
+                longitude=order_dict['longitude'],
+                address=order_dict.get('address', ''),
+                distance_from_prev_km=round(float(leg_km), 3),
+                eta=eta,
+            )
         )
 
-    # Update vehicle load
-    db.vehicles.update_one(
-        {'_id': vehicle['_id']},
-        {'$set': {'current_load': len(ordered_stops), 'updated_at': now_utc()}}
-    )
+    RouteStop.objects.bulk_create(stop_objects)
 
-    orders_map = {str(o['_id']): o for o in ordered_stops}
+    if order_ids_to_assign:
+        Order.objects.filter(id__in=order_ids_to_assign).update(
+            status=Order.STATUS_ASSIGNED,
+            vehicle=vehicle
+        )
+
+    vehicle.current_load = len(ordered_stops)
+    vehicle.save(update_fields=['current_load'])
+
     return format_route_optimization(
-        route=route_doc,
-        stops_docs=stops_docs,
-        orders_map=orders_map,
-        center_doc=center,
-        vehicle_doc=vehicle,
+        route=route,
+        stops_list=stop_objects,
+        center_obj=center,
+        vehicle_obj=vehicle,
     )
 
 
 def process_center(
-    user_id: str,
-    center: Dict[str, Any],
+    user_id: Any,
+    center: DeliveryCenter,
     departure_at: datetime.datetime,
     date: str,
 ) -> List[Dict[str, Any]]:
-    c_id_str = str(center['_id'])
-    c_lat = float(center['latitude'])
-    c_lon = float(center['longitude'])
+    c_lat = float(center.latitude)
+    c_lon = float(center.longitude)
 
-    # Find pending/assigned orders for center on date that are not in in_progress routes
-    dt_str = date[:10]
-    try:
-        dt = datetime.datetime.strptime(dt_str, '%Y-%m-%d')
-        start = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
-        date_q = {
-            '$or': [
-                {'delivery_date': {'$gte': start, '$lte': end}},
-                {'delivery_date': {'$regex': f"^{dt_str}"}},
-                {'delivery_date': dt_str},
-            ]
-        }
-    except Exception:
-        date_q = {'delivery_date': dt_str}
+    parsed_d = parse_date(date)
+    if not parsed_d:
+        return []
 
-    orders_query = {
-        'user_id': str(user_id),
-        '$or': [{'delivery_center_id': c_id_str}, {'delivery_center_id': to_object_id(c_id_str)}],
-        'status': {'$in': ['pending', 'assigned']},
-    }
-    orders_query.update(date_q)
-
-    all_orders = list(db.orders.find(orders_query))
+    orders_qs = Order.objects.filter(
+        user_id=user_id,
+        delivery_center=center,
+        delivery_date=parsed_d,
+        status__in=[Order.STATUS_PENDING, Order.STATUS_ASSIGNED]
+    )
 
     # Exclude orders with in_progress routeStop
-    filtered_orders = []
-    for o in all_orders:
-        stop = db.route_stops.find_one({'order_id': str(o['_id'])})
-        if stop:
-            r = db.routes.find_one({'_id': to_object_id(stop.get('route_id')), 'status': 'in_progress'})
-            if r:
-                continue
+    in_progress_order_ids = RouteStop.objects.filter(
+        route__status=Route.STATUS_IN_PROGRESS
+    ).values_list('order_id', flat=True)
 
-        dist = DistanceHelper.km_between(float(o.get('latitude', 0.0)), float(o.get('longitude', 0.0)), c_lat, c_lon)
+    if in_progress_order_ids:
+        orders_qs = orders_qs.exclude(id__in=in_progress_order_ids)
+
+    candidate_orders = list(orders_qs)
+    filtered_orders = []
+    for o in candidate_orders:
+        dist = DistanceHelper.km_between(float(o.latitude), float(o.longitude), c_lat, c_lon)
         if dist <= 10.0:
-            filtered_orders.append(o)
+            filtered_orders.append({
+                'id': str(o.id),
+                '_id': str(o.id),
+                'latitude': float(o.latitude),
+                'longitude': float(o.longitude),
+                'address': o.address,
+                'priority': o.priority,
+            })
 
     if not filtered_orders:
         return []
 
-    # Get available vehicles
-    vehicles = list(db.vehicles.find({
-        'user_id': str(user_id),
-        'is_available': True,
-        '$or': [{'delivery_center_id': c_id_str}, {'delivery_center_id': to_object_id(c_id_str)}],
-    }).sort('_id', 1))
+    vehicles = list(Vehicle.objects.filter(
+        user_id=user_id,
+        is_available=True,
+        delivery_center=center
+    ).order_by('id'))
 
     if not vehicles:
         raise ValidationError({'delivery_center_id': ['No available vehicles exist for this delivery center.']})
@@ -344,7 +323,7 @@ def process_center(
         if not bucket:
             continue
 
-        vehicle = next((v for v in vehicles if str(v['_id']) == v_id_str), None)
+        vehicle = next((v for v in vehicles if str(v.id) == v_id_str), None)
         if not vehicle:
             continue
 
@@ -385,7 +364,7 @@ def process_center(
 
         comparisons.append({
             'comparison_batch_id': batch_id,
-            'delivery_center_id': c_id_str,
+            'delivery_center_id': str(center.id),
             'vehicle_id': v_id_str,
             'shortest_distance_route': route_formatted,
         })
@@ -394,8 +373,8 @@ def process_center(
 
 
 def generate_routes(
-    user_id: str,
-    delivery_center_id: Optional[str] = None,
+    user_id: Any,
+    delivery_center_id: Optional[Any] = None,
     departure_at: Optional[datetime.datetime] = None,
     date: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
@@ -403,21 +382,19 @@ def generate_routes(
         raise ValidationError({'date': ['A delivery date is required to generate routes.']})
 
     if departure_at is None:
-        departure_at = now_utc()
+        departure_at = timezone.now()
 
     if delivery_center_id:
-        c_q = id_query(delivery_center_id)
-        c_q['user_id'] = str(user_id)
-        center = db.delivery_centers.find_one(c_q)
+        center = DeliveryCenter.objects.filter(id=delivery_center_id, user_id=user_id).first()
         if not center:
             raise ValidationError({'delivery_center_id': ['The selected delivery center is invalid.']})
         centers = [center]
     else:
-        centers = list(db.delivery_centers.find({'user_id': str(user_id)}))
+        centers = list(DeliveryCenter.objects.filter(user_id=user_id))
 
     comparisons = []
     for center in centers:
-        clear_planned_routes_internal(user_id, center['_id'])
+        clear_planned_routes_internal(user_id, center.id)
         capture_nearby_orders(user_id, center, 10.0, date)
         batch = process_center(user_id, center, departure_at, date)
         comparisons.extend(batch)
@@ -426,56 +403,62 @@ def generate_routes(
 
 
 def regenerate_routes_for_center(
-    user_id: str,
-    delivery_center_id: str,
+    user_id: Any,
+    delivery_center_id: Any,
     departure_at: Optional[datetime.datetime] = None,
     date: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    c_q = id_query(delivery_center_id)
-    c_q['user_id'] = str(user_id)
-    center = db.delivery_centers.find_one(c_q)
+    center = DeliveryCenter.objects.filter(id=delivery_center_id, user_id=user_id).first()
     if not center:
         raise ValidationError({'center_id': ['The selected delivery center is invalid.']})
 
-    clear_planned_routes_internal(user_id, center['_id'])
+    clear_planned_routes_internal(user_id, center.id)
     capture_nearby_orders(user_id, center, 10.0, date)
-    return generate_routes(user_id, str(center['_id']), departure_at, date)
+    return generate_routes(user_id, str(center.id), departure_at, date)
 
 
 def generate_route_for_vehicle(
-    user_id: str,
-    vehicle_id: str,
+    user_id: Any,
+    vehicle_id: Any,
     departure_at: Optional[datetime.datetime] = None,
 ) -> Dict[str, Any]:
     if departure_at is None:
-        departure_at = now_utc()
+        departure_at = timezone.now()
 
-    v_q = id_query(vehicle_id)
-    v_q['user_id'] = str(user_id)
-    vehicle = db.vehicles.find_one(v_q)
+    vehicle = Vehicle.objects.filter(id=vehicle_id, user_id=user_id).select_related('delivery_center').first()
     if not vehicle:
         raise ValidationError({'vehicle_id': ['Vehicle not found.']})
 
-    dc_id = vehicle.get('delivery_center_id')
-    center = db.delivery_centers.find_one(id_query(dc_id)) if dc_id else None
+    center = vehicle.delivery_center
     if not center:
         raise ValidationError({'vehicle_id': ['Vehicle does not belong to a valid delivery center.']})
 
-    v_id_str = str(vehicle['_id'])
-    orders = list(db.orders.find({
-        'user_id': str(user_id),
-        'vehicle_id': v_id_str,
-        'status': 'assigned',
-    }))
+    orders = list(Order.objects.filter(
+        user_id=user_id,
+        vehicle=vehicle,
+        status=Order.STATUS_ASSIGNED
+    ))
 
     if not orders:
         raise ValidationError({'vehicle_id': ['No assigned orders for this vehicle.']})
 
-    c_lat = float(center['latitude'])
-    c_lon = float(center['longitude'])
+    c_lat = float(center.latitude)
+    c_lon = float(center.longitude)
 
-    priority_orders = [o for o in orders if o.get('priority') == 'priority']
-    normal_orders = [o for o in orders if o.get('priority') != 'priority']
+    order_dicts = [
+        {
+            'id': str(o.id),
+            '_id': str(o.id),
+            'latitude': float(o.latitude),
+            'longitude': float(o.longitude),
+            'address': o.address,
+            'priority': o.priority,
+        }
+        for o in orders
+    ]
+
+    priority_orders = [o for o in order_dicts if o.get('priority') == 'priority']
+    normal_orders = [o for o in order_dicts if o.get('priority') != 'priority']
 
     optimizer = RouteOptimizer(c_lat, c_lon)
     priority_tour = optimizer.build_shortest_distance_tour(priority_orders)
@@ -495,41 +478,29 @@ def generate_route_for_vehicle(
 
     return {
         'comparison_batch_id': batch_id,
-        'delivery_center_id': str(center['_id']),
-        'vehicle_id': v_id_str,
+        'delivery_center_id': str(center.id),
+        'vehicle_id': str(vehicle.id),
         'route': route_formatted,
     }
 
 
-def clear_routes(user_id: str, delivery_center_id: Optional[str] = None) -> None:
-    q: Dict[str, Any] = {'user_id': str(user_id)}
+def clear_routes(user_id: Any, delivery_center_id: Optional[Any] = None) -> None:
+    qs = Route.objects.filter(user_id=user_id)
     if delivery_center_id:
-        dc_str = str(delivery_center_id)
-        q['$or'] = [{'delivery_center_id': dc_str}, {'delivery_center_id': to_object_id(dc_str)}]
+        qs = qs.filter(delivery_center_id=delivery_center_id)
 
-    routes = list(db.routes.find(q))
+    routes = list(qs)
     for route in routes:
-        r_id = str(route['_id'])
-        stops = list(db.route_stops.find({'route_id': r_id}))
-        order_ids = [s.get('order_id') for s in stops if s.get('order_id')]
+        stops = RouteStop.objects.filter(route=route).exclude(order__isnull=True)
+        order_ids = [s.order_id for s in stops]
 
         if order_ids:
-            # Revert orders back to pending
-            db.orders.update_many(
-                {
-                    'user_id': str(user_id),
-                    '$or': [
-                        {'_id': {'$in': [to_object_id(oid) for oid in order_ids]}},
-                        {'_id': {'$in': [str(oid) for oid in order_ids]}},
-                    ]
-                },
-                {'$set': {'vehicle_id': None, 'updated_at': now_utc()}}
-            )
+            Order.objects.filter(
+                id__in=order_ids,
+                user_id=user_id
+            ).update(vehicle=None, status=Order.STATUS_PENDING)
 
-        v_id = route.get('vehicle_id')
-        if v_id:
-            db.vehicles.update_one(id_query(v_id), {'$set': {'current_load': 0, 'updated_at': now_utc()}})
+        if route.vehicle_id:
+            Vehicle.objects.filter(id=route.vehicle_id).update(current_load=0)
 
-        db.route_stops.delete_many({'route_id': r_id})
-        db.routes.delete_one({'_id': route['_id']})
-
+        route.delete()

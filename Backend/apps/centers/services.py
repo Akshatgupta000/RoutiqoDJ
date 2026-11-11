@@ -1,45 +1,49 @@
 from typing import Any, Dict, List, Optional
 from rest_framework.exceptions import NotFound, ValidationError
-from core.database import db, now_utc, id_query, to_object_id
 from core.helpers import DistanceHelper
 from core.serializers import format_delivery_center
+from apps.centers.models import DeliveryCenter
+from apps.orders.models import Order
+from apps.vehicles.models import Vehicle
+from apps.zones.models import ServiceZone
+from apps.routes.models import Route
 
 
-def list_centers(user_id: str) -> List[Dict[str, Any]]:
-    docs = list(db.delivery_centers.find({'user_id': str(user_id)}).sort('name', 1))
-    return docs
+def list_centers(user_id: Any) -> List[DeliveryCenter]:
+    return list(DeliveryCenter.objects.filter(user_id=user_id).order_by('name'))
 
 
-def find_center(user_id: str, center_id: str) -> Optional[Dict[str, Any]]:
-    q = id_query(center_id)
-    q['user_id'] = str(user_id)
-    return db.delivery_centers.find_one(q)
+def find_center(user_id: Any, center_id: Any) -> Optional[DeliveryCenter]:
+    try:
+        return DeliveryCenter.objects.filter(id=center_id, user_id=user_id).first()
+    except (ValueError, TypeError):
+        return None
 
 
-def reassign_orders_to_best_center(user_id: str, orders: Optional[List[Dict[str, Any]]] = None) -> None:
+def reassign_orders_to_best_center(user_id: Any, orders: Optional[List[Order]] = None) -> None:
     centers = list_centers(user_id)
-    
+
     if orders is None:
-        orders = list(db.orders.find({'user_id': str(user_id)}))
+        orders = list(Order.objects.filter(user_id=user_id))
 
     if not centers:
-        for order in orders:
-            db.orders.update_one(
-                {'_id': order['_id']},
-                {'$set': {'delivery_center_id': None, 'status': 'pending', 'updated_at': now_utc()}}
-            )
+        Order.objects.filter(user_id=user_id, id__in=[o.id for o in orders]).update(
+            delivery_center=None,
+            status=Order.STATUS_PENDING
+        )
         return
 
+    orders_to_update = []
     for order in orders:
-        order_lat = float(order.get('latitude', 0.0))
-        order_lon = float(order.get('longitude', 0.0))
+        order_lat = float(order.latitude)
+        order_lon = float(order.longitude)
         min_dist = 10.0  # Strict 10km radius
         nearest_center = None
 
         # Bounding box filter (Approx 0.12 deg ~ 13.3km)
         for center in centers:
-            c_lat = float(center.get('latitude', 0.0))
-            c_lon = float(center.get('longitude', 0.0))
+            c_lat = float(center.latitude)
+            c_lon = float(center.longitude)
 
             if abs(order_lat - c_lat) > 0.12 or abs(order_lon - c_lon) > 0.12:
                 continue
@@ -50,30 +54,19 @@ def reassign_orders_to_best_center(user_id: str, orders: Optional[List[Dict[str,
                 nearest_center = center
 
         if nearest_center:
-            db.orders.update_one(
-                {'_id': order['_id']},
-                {
-                    '$set': {
-                        'delivery_center_id': str(nearest_center['_id']),
-                        'status': 'assigned',
-                        'updated_at': now_utc(),
-                    }
-                }
-            )
+            order.delivery_center = nearest_center
+            order.status = Order.STATUS_ASSIGNED
         else:
-            db.orders.update_one(
-                {'_id': order['_id']},
-                {
-                    '$set': {
-                        'delivery_center_id': None,
-                        'status': 'pending',
-                        'updated_at': now_utc(),
-                    }
-                }
-            )
+            order.delivery_center = None
+            order.status = Order.STATUS_PENDING
+
+        orders_to_update.append(order)
+
+    if orders_to_update:
+        Order.objects.bulk_update(orders_to_update, ['delivery_center', 'status', 'updated_at'])
 
 
-def create_center(user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+def create_center(user_id: Any, data: Dict[str, Any]) -> DeliveryCenter:
     name = data.get('name')
     lat = data.get('latitude')
     lng = data.get('longitude')
@@ -104,37 +97,32 @@ def create_center(user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
     if errors:
         raise ValidationError(errors)
 
-    center_doc = {
-        'user_id': str(user_id),
-        'name': str(name).strip(),
-        'latitude': float(lat),
-        'longitude': float(lng),
-        'created_at': now_utc(),
-        'updated_at': now_utc(),
-    }
-    res = db.delivery_centers.insert_one(center_doc)
-    center_doc['_id'] = res.inserted_id
+    center = DeliveryCenter.objects.create(
+        user_id=user_id,
+        name=str(name).strip(),
+        latitude=lat,
+        longitude=lng,
+    )
 
     # Auto-redistribute orders (New hub captures nearby orders)
     reassign_orders_to_best_center(user_id)
 
-    return center_doc
+    return center
 
 
-def update_center(user_id: str, center_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+def update_center(user_id: Any, center_id: Any, data: Dict[str, Any]) -> DeliveryCenter:
     center = find_center(user_id, center_id)
     if not center:
         raise NotFound('Delivery center not found.')
 
-    updates: Dict[str, Any] = {}
     if 'name' in data:
-        updates['name'] = str(data['name']).strip()
+        center.name = str(data['name']).strip()
     if 'latitude' in data:
         try:
             lat = float(data['latitude'])
             if not (-90.0 <= lat <= 90.0):
                 raise ValidationError({'latitude': ['The latitude field must be between -90 and 90.']})
-            updates['latitude'] = lat
+            center.latitude = lat
         except (ValueError, TypeError):
             raise ValidationError({'latitude': ['The latitude field must be a number.']})
     if 'longitude' in data:
@@ -142,51 +130,36 @@ def update_center(user_id: str, center_id: str, data: Dict[str, Any]) -> Dict[st
             lng = float(data['longitude'])
             if not (-180.0 <= lng <= 180.0):
                 raise ValidationError({'longitude': ['The longitude field must be between -180 and 180.']})
-            updates['longitude'] = lng
+            center.longitude = lng
         except (ValueError, TypeError):
             raise ValidationError({'longitude': ['The longitude field must be a number.']})
 
-    if updates:
-        updates['updated_at'] = now_utc()
-        db.delivery_centers.update_one({'_id': center['_id']}, {'$set': updates})
-        center.update(updates)
-
+    center.save()
     return center
 
 
-def delete_center(user_id: str, center_id: str) -> Dict[str, Any]:
+def delete_center(user_id: Any, center_id: Any) -> Dict[str, Any]:
     center = find_center(user_id, center_id)
     if not center:
         raise NotFound('Delivery center not found.')
 
-    c_id_str = str(center['_id'])
-
     # Step 1: Get orders of deleting hub
-    orders = list(db.orders.find({
-        'user_id': str(user_id),
-        '$or': [{'delivery_center_id': c_id_str}, {'delivery_center_id': to_object_id(c_id_str)}]
-    }))
+    orders = list(Order.objects.filter(user_id=user_id, delivery_center=center))
 
     # Step 2: Delete vehicles of this hub
-    db.vehicles.delete_many({
-        'user_id': str(user_id),
-        '$or': [{'delivery_center_id': c_id_str}, {'delivery_center_id': to_object_id(c_id_str)}]
-    })
+    Vehicle.objects.filter(user_id=user_id, delivery_center=center).delete()
 
     # Step 3: Delete service zones of this hub
-    db.service_zones.delete_many({
-        'user_id': str(user_id),
-        '$or': [{'delivery_center_id': c_id_str}, {'delivery_center_id': to_object_id(c_id_str)}]
-    })
+    ServiceZone.objects.filter(user_id=user_id, delivery_center=center).delete()
 
     # Step 4: Delete Hub
-    db.delivery_centers.delete_one({'_id': center['_id']})
+    center.delete()
 
     # Step 5: Reassign orphaned orders to remaining hubs
     reassign_orders_to_best_center(user_id, orders)
 
     # Step 6: Clear ALL routes to reset map as requested
-    db.routes.delete_many({'user_id': str(user_id)})
+    Route.objects.filter(user_id=user_id).delete()
 
     remaining_centers = list_centers(user_id)
     return {

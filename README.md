@@ -2,19 +2,20 @@
 
 **Intelligent Fleet Dispatch. Optimized Routes. Smarter Last-Mile Logistics.**
 
-Routiqo is an intelligent, full-stack logistics management platform engineered to resolve the "Last-Mile Delivery" challenge. It pairs spatial partitioning, road-network route optimization, capacity balancing, and real-time interactive mapping to automate fleet dispatch operations.
+Routiqo is an intelligent, production-ready full-stack logistics management platform engineered to resolve the "Last-Mile Delivery" challenge. Built with **Django REST Framework**, **PostgreSQL 16**, **psycopg 3**, and **React 19**, it pairs spatial partitioning, road-network route optimization, capacity balancing, and real-time interactive mapping to automate fleet dispatch operations within Docker Compose.
 
 ---
 
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat&logo=python&logoColor=white)
 ![Django](https://img.shields.io/badge/Django-5.x%20%2F%206.x-092E20?style=flat&logo=django&logoColor=white)
 ![Django REST Framework](https://img.shields.io/badge/Django%20REST%20Framework-3.15+-A30000?style=flat&logo=django&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=flat&logo=postgresql&logoColor=white)
+![psycopg](https://img.shields.io/badge/driver-psycopg%203-2E7D32?style=flat)
 ![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react&logoColor=black)
-![MongoDB](https://img.shields.io/badge/MongoDB-Atlas%20%2F%20PyMongo-47A248?style=flat&logo=mongodb&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4.x-38B2AC?style=flat&logo=tailwind-css&logoColor=white)
 ![Leaflet](https://img.shields.io/badge/Leaflet-1.9-199900?style=flat&logo=leaflet&logoColor=white)
 ![OSRM](https://img.shields.io/badge/OSRM-Routing%20Engine-7B2CBF?style=flat)
-![REST API](https://img.shields.io/badge/REST%20API-JSON-FF6B35?style=flat)
+![Docker](https://img.shields.io/badge/Docker%20Compose-Ready-2496ED?style=flat&logo=docker&logoColor=white)
 
 ---
 
@@ -25,14 +26,18 @@ Routiqo is an intelligent, full-stack logistics management platform engineered t
 - [Core Features](#core-features)
 - [Technology Stack](#technology-stack)
 - [System Architecture](#system-architecture)
+- [PostgreSQL Database Architecture & Schema](#postgresql-database-architecture--schema)
 - [Project Directory Structure](#project-directory-structure)
-- [Docker Setup (Recommended)](#docker-setup-recommended)
-- [Installation and Local Setup](#installation-and-local-setup)
-- [Environment Variables](#environment-variables)
+- [Docker Compose Setup (Recommended)](#docker-compose-setup-recommended)
+- [Local Linux Mint Setup](#local-linux-mint-setup)
+- [Environment Configuration](#environment-configuration)
+- [Importing Existing MongoDB Atlas Data](#importing-existing-mongodb-atlas-data)
+- [Database Persistence and Backups](#database-persistence-and-backups)
 - [Application Workflow](#application-workflow)
 - [Algorithms and Engineering Details](#algorithms-and-engineering-details)
 - [API Documentation](#api-documentation)
 - [Testing](#testing)
+- [Troubleshooting Common Errors](#troubleshooting-common-errors)
 - [Engineering Decisions](#engineering-decisions)
 - [Limitations](#limitations)
 - [Roadmap](#roadmap)
@@ -57,30 +62,21 @@ In modern supply chain management, the "last mile" represents up to 53% of total
 
 ## Screenshots
 
-> Visual assets should be saved in `docs/screenshots/`.
-
-| Dashboard & Map View | Territory Partitioning |
-|:---:|:---:|
-| *(Add `docs/screenshots/dashboard-map.png`)* | *(Add `docs/screenshots/voronoi-zones.png`)* |
-| **Interactive Leaflet map showing hubs, orders & active routes** | **Voronoi service zone boundaries computed via D3-Delaunay** |
-
-| Route Optimization & Fleet Details | Order Management |
-|:---:|:---:|
-| *(Add `docs/screenshots/route-details.png`)* | *(Add `docs/screenshots/order-management.png`)* |
-| **Step-by-step turn sequence, leg distances, and stop ETAs** | **Paginated order overview with bulk filtering and status actions** |
+> Visual assets are located in `docs/screenshots/`.
 
 ---
 
 ## Core Features
 
-- **Delivery Center (Hub) Management**: Complete CRUD operations for distribution centers. Creating a hub triggers automatic order capture of nearby orders. Deleting a hub gracefully cascades by removing its assigned vehicles/zones, reassigning orphaned orders to remaining hubs, and clearing planned routes.
-- **Vehicle & Fleet Management**: Track vehicle capacities, operational availability, and average speeds. Automatically generates Indian RTO vehicle registration prefixes based on hub location names (e.g., `UP32` for Lucknow, `DL01` for Delhi, `MH01` for Mumbai).
-- **Order Management & Geocoding**: Manage deliveries with address geocoding via OpenStreetMap Nominatim. Orders can be filtered by date, delivery center, or status (`pending`, `assigned`, `delivered`). Bulk actions include date clearing, completed order removal, and bulk delivery marking.
-- **Voronoi-Based Spatial Partitioning**: Computes non-overlapping service polygons across delivery centers using `d3-delaunay` on the client and validates membership via ray-casting point-in-polygon checks on the backend.
+- **Hub Management (CRUD)**: Create, inspect, update, and delete delivery depots with geographic coordinates.
+- **Fleet Management (CRUD)**: Manage vehicle capacities (1–1000 packages), speed parameters, availability, and automatic RTO plate number generation.
+- **Order Management (CRUD & Bulk Ops)**: Create delivery orders with geocoding, assign them to hubs, update delivery dates, filter by status, and execute bulk operations.
+- **Automated 10 km Hub Assignment**: Auto-assigns orders to the nearest hub within 10 km; marks orders pending when out of range.
+- **Voronoi Zone Generation**: Client-side Voronoi calculation and server-side ray-casting Point-in-Polygon checks.
 - **Nearest-Neighbor & 2-Opt Optimization**: Combines greedy nearest-neighbor stop ordering with 2-opt pairwise edge exchange heuristic for high-efficiency route discovery without the exponential latency of exact TSP solvers.
 - **OSRM Road Geometry**: Directly calls the Open Source Routing Machine (`/route/v1/driving/`) to render street-conforming GeoJSON polylines on Leaflet.
 - **Simulated Rider Movement**: Renders smooth vehicle marker animation along planned route coordinates using time-step interpolation.
-- **Sanctum-Compatible Authentication**: High-security user authentication with bcrypt password hashing (supporting `$2y$` and `$2b$` formats), personal access tokens (SHA-256 hashed), and 6-digit email OTP password resets.
+- **Secure Authentication & Backward Compatibility**: User authentication with dual-hasher support (Django PBKDF2 with automatic upgrade from legacy bcrypt `$2y$` / `$2b$` hashes), personal access tokens (SHA-256 hashed), and 6-digit email OTP password resets.
 
 ---
 
@@ -93,13 +89,13 @@ In modern supply chain management, the "last mile" represents up to 53% of total
 | **Python** | 3.12+ | Core runtime language |
 | **Django** | 5.x / 6.x | High-level web framework and request handling |
 | **Django REST Framework** | 3.15+ | REST API architecture, serializers, and permissions |
-| **PyMongo** | 4.6+ | Direct MongoDB driver for high-performance document operations |
+| **PostgreSQL** | 16 | Relational database management system |
+| **psycopg (psycopg 3)** | 3.1+ | Modern, high-performance PostgreSQL database driver |
 | **django-cors-headers**| 4.3+ | Cross-Origin Resource Sharing control for React clients |
-| **bcrypt** | 4.1+ | Cryptographic password hashing and cross-platform verification |
+| **bcrypt** | 4.1+ | Cryptographic password verification for legacy Atlas hashes |
 | **requests** | 2.31+ | Synchronous HTTP client for OSRM and Nominatim integrations |
 | **python-dotenv** | 1.0+ | Twelve-factor application environment variable management |
-| **pytest & pytest-django**| 8.0+ | Automated unit, API, and integration test suite |
-| **mongomock** | 4.3+ | In-memory MongoDB mock for isolated, network-independent tests |
+| **pytest & pytest-django**| 8.0+ / 4.x+ | Automated unit, API, and integration test suite |
 
 ### Frontend
 
@@ -114,15 +110,6 @@ In modern supply chain management, the "last mile" represents up to 53% of total
 | | **Framer Motion** | 12.x | Fluid UI animations, modals, and panel transitions |
 | | **Lucide React** | 1.x | Modern UI iconography |
 | **Landing** | **React & Tailwind CSS**| 19.x / 4.x | Product presentation, account registration, and authentication |
-
-### Database & External Services
-
-| Service | Role |
-|---|---|
-| **MongoDB (Atlas / Community)** | Primary persistent document database (`delivery_centers`, `vehicles`, `orders`, `routes`, `route_stops`, `service_zones`, `users`, `personal_access_tokens`) |
-| **SQLite (`db.sqlite3`)** | Internal Django storage for session management and admin infrastructure |
-| **OSRM (Open Source Routing Machine)** | Road-network driving geometry, distance computation, and duration matrices |
-| **Nominatim (OpenStreetMap)** | Forward geocoding of textual customer addresses into latitude/longitude coordinates |
 
 ---
 
@@ -148,9 +135,11 @@ flowchart TD
         end
     end
 
-    subgraph DataExternal["Storage & External Engines"]
-        MONGO[("MongoDB Database\n(PyMongo Collections)")]
-        SQLITE[("SQLite\n(Django Internal Sessions)")]
+    subgraph DatabaseLayer["Relational Database Layer (Port 5432)"]
+        PG[("PostgreSQL 16 Database\n(Named Volume: postgres_data)")]
+    end
+
+    subgraph ExternalEngines["External Microservices"]
         OSRM["OSRM Routing Engine\n(/route/v1/driving/)"]
         NOM["Nominatim Geocoding\n(OpenStreetMap)"]
     end
@@ -161,17 +150,124 @@ flowchart TD
 
     API --> AUTH & CENT & VEH & ORD & RT & ZN
     
-    AUTH --> MONGO
-    CENT --> MONGO
-    VEH --> MONGO
-    ORD --> MONGO
-    RT --> MONGO
-    ZN --> MONGO
+    AUTH & CENT & VEH & ORD & RT & ZN -- "Django ORM (psycopg 3)" --> PG
     
-    API -. "Session storage" .-> SQLITE
     ORD -- "Address to Lat/Lng" --> NOM
     RT -- "Waypoints to Road Geometry" --> OSRM
 ```
+
+---
+
+## PostgreSQL Database Architecture & Schema
+
+Routiqo uses pure relational Django ORM models backed by PostgreSQL 16. Coordinates are stored in high-precision `DecimalField(max_digits=10, decimal_places=7)`, and variable-length route polylines are stored in native `JSONField`.
+
+```mermaid
+erDiagram
+    User ||--o{ PersonalAccessToken : "issues"
+    User ||--o{ DeliveryCenter : "owns"
+    User ||--o{ Vehicle : "manages"
+    User ||--o{ Order : "creates"
+    User ||--o{ Route : "plans"
+    User ||--o{ ServiceZone : "configures"
+
+    DeliveryCenter ||--o{ Vehicle : "stations"
+    DeliveryCenter ||--o{ Order : "services"
+    DeliveryCenter ||--o{ Route : "depot for"
+    DeliveryCenter ||--o{ ServiceZone : "boundary of"
+
+    Vehicle ||--o{ Order : "assigned to"
+    Vehicle ||--o{ Route : "executes"
+
+    Route ||--o{ RouteStop : "contains"
+    Order ||--o{ RouteStop : "destination of"
+```
+
+### Table Definitions
+
+#### 1. `authentication_user`
+- `id` (BigAutoField, PK)
+- `email` (EmailField, Unique, Index)
+- `name` (CharField)
+- `password` (CharField — supports PBKDF2 and legacy bcrypt `$2y$` / `$2b$`)
+- `reset_otp_hash` (CharField 64, Nullable)
+- `reset_otp_expires` (DateTimeField, Nullable)
+- `is_active`, `is_staff`, `is_superuser` (BooleanField)
+- `created_at`, `updated_at` (DateTimeField)
+
+#### 2. `authentication_personalaccesstoken`
+- `id` (BigAutoField, PK)
+- `user_id` (ForeignKey → `authentication_user.id`, CASCADE)
+- `name` (CharField)
+- `token` (CharField 64, Unique, SHA-256 hash)
+- `abilities` (JSONField)
+- `last_used_at`, `expires_at` (DateTimeField, Nullable)
+
+#### 3. `centers_deliverycenter`
+- `id` (BigAutoField, PK)
+- `user_id` (ForeignKey → `authentication_user.id`, CASCADE)
+- `name` (CharField 255)
+- `latitude` (DecimalField 10,7)
+- `longitude` (DecimalField 10,7)
+- Indexes: `[user, name]`
+
+#### 4. `vehicles_vehicle`
+- `id` (BigAutoField, PK)
+- `user_id` (ForeignKey → `authentication_user.id`, CASCADE)
+- `delivery_center_id` (ForeignKey → `centers_deliverycenter.id`, CASCADE, Nullable)
+- `name` (CharField 255)
+- `vehicle_number` (CharField 50)
+- `capacity` (PositiveIntegerField, Constraint: 1 <= capacity <= 1000)
+- `current_load` (PositiveIntegerField, default 0)
+- `average_speed` (DecimalField 6,2, default 25.0)
+- `is_available` (BooleanField, default True)
+- Indexes: `[user, delivery_center]`, `[user, is_available]`
+
+#### 5. `orders_order`
+- `id` (BigAutoField, PK)
+- `user_id` (ForeignKey → `authentication_user.id`, CASCADE)
+- `delivery_center_id` (ForeignKey → `centers_deliverycenter.id`, SET_NULL, Nullable)
+- `vehicle_id` (ForeignKey → `vehicles_vehicle.id`, SET_NULL, Nullable)
+- `address` (TextField)
+- `latitude` (DecimalField 10,7)
+- `longitude` (DecimalField 10,7)
+- `delivery_date` (DateField, Index)
+- `status` (CharField 20, Index — `pending`, `assigned`, `delivered`)
+- `priority` (CharField 20 — `normal`, `priority`)
+- Indexes: `[user, status]`, `[user, delivery_date]`, `[user, delivery_center]`
+
+#### 6. `routes_route`
+- `id` (BigAutoField, PK)
+- `user_id` (ForeignKey → `authentication_user.id`, CASCADE)
+- `delivery_center_id` (ForeignKey → `centers_deliverycenter.id`, SET_NULL, Nullable)
+- `vehicle_id` (ForeignKey → `vehicles_vehicle.id`, SET_NULL, Nullable)
+- `status` (CharField 20, Index — `planned`, `in_progress`, `completed`)
+- `profile` (CharField 50, default `shortest_distance`)
+- `comparison_batch_id` (CharField 64, Index)
+- `total_distance_km` (DecimalField 10,3)
+- `total_duration_min` (DecimalField 10,2)
+- `total_stops` (PositiveIntegerField)
+- `geometry` (JSONField — array of `[lat, lng]` coordinate pairs)
+- `departure_at` (DateTimeField, Nullable)
+
+#### 7. `routes_routestop`
+- `id` (BigAutoField, PK)
+- `route_id` (ForeignKey → `routes_route.id`, CASCADE)
+- `order_id` (ForeignKey → `orders_order.id`, SET_NULL, Nullable)
+- `stop_index` (PositiveIntegerField)
+- `latitude` (DecimalField 10,7)
+- `longitude` (DecimalField 10,7)
+- `address` (TextField)
+- `eta` (DateTimeField, Nullable)
+- `distance_from_prev_km` (DecimalField 8,3)
+- Constraints: `UniqueTogether(['route', 'stop_index'])`
+
+#### 8. `zones_servicezone`
+- `id` (BigAutoField, PK)
+- `user_id` (ForeignKey → `authentication_user.id`, CASCADE)
+- `delivery_center_id` (ForeignKey → `centers_deliverycenter.id`, CASCADE)
+- `polygon_coordinates` (JSONField — array of `[lat, lng]` boundary vertices)
+- Indexes: `[user, delivery_center]`
 
 ---
 
@@ -179,556 +275,276 @@ flowchart TD
 
 ```
 Routiqo/
-├── Backend/                         # Active Django backend
-│   ├── manage.py                    # Django management CLI script
-│   ├── requirements.txt             # Python backend dependencies
-│   ├── pytest.ini                   # Pytest test suite configuration
-│   ├── .env.example                 # Example environment variables
-│   ├── config/                      # Core Django project configuration
-│   │   ├── __init__.py
-│   │   ├── settings.py              # Settings (DB, CORS, DRF, OSRM, Auth)
-│   │   ├── urls.py                  # Master API URL router
-│   │   ├── wsgi.py                  # WSGI server entry point
-│   │   └── asgi.py                  # ASGI server entry point
-│   ├── apps/                        # Domain-driven Django applications
-│   │   ├── authentication/          # User auth, Sanctum tokens, OTP reset
-│   │   ├── centers/                 # Delivery center CRUD & order capture
-│   │   ├── vehicles/                # Fleet vehicles, RTO prefix generator
-│   │   ├── orders/                  # Orders, filtering, pagination, bulk ops
-│   │   ├── routes/                  # Route generation, OSRM dispatch
-│   │   └── zones/                   # Voronoi polygon persistence & PIP check
-│   ├── core/                        # Reusable architectural utilities
-│   │   ├── database.py              # PyMongo connection & ObjectId query wrappers
-│   │   ├── authentication.py        # BearerTokenAuthentication & bcrypt verify
-│   │   ├── helpers.py               # Haversine, RouteOptimizer (2-Opt), Timing
-│   │   ├── serializers.py           # Document serializing & formatting
-│   │   └── exceptions.py            # Centralized DRF exception handlers
-│   └── tests/                       # Automated pytest suite (31 tests)
-│       ├── conftest.py              # Mock MongoDB & test client fixtures
-│       ├── test_auth.py             # Auth endpoints & OTP lifecycle tests
-│       ├── test_centers.py          # Center CRUD & cascade reassignment tests
-│       ├── test_vehicles.py         # Vehicle management & RTO prefix tests
-│       ├── test_orders.py           # Orders, bulk counts & radius filter tests
-│       ├── test_zones.py            # Voronoi zone persistence & check tests
-│       └── test_optimization.py     # Haversine, NN, 2-opt, PIP unit tests
+├── docker-compose.yml           # Production Docker Compose orchestration
+├── .env.example                 # Root configuration example
+├── README.md                    # Root project documentation
 │
-├── Dashboard/                       # React 19 Dispatch Dashboard
-│   ├── package.json                 # Dashboard frontend dependencies
-│   ├── vite.config.js               # Vite build & plugin configuration
-│   ├── public/                      # Static assets & icons
-│   └── src/
-│       ├── App.jsx                  # Root dashboard routing & layout
-│       ├── context/AppContext.jsx   # State manager (routes, hubs, vehicles, playback)
-│       ├── components/
-│       │   ├── Map/                 # MapView (Leaflet, polylines, Voronoi cells)
-│       │   ├── Route/               # FleetOverview, RouteDetailsPanel
-│       │   ├── Forms/               # AddCenter, AddOrder, AddVehicle modals
-│       │   └── UI/                  # Modal, Drawer, Table, Badge, Toast
-│       ├── services/api.js          # Axios API client with token interceptor
-│       └── utils/                   # Geometry, coordinates, simulation helpers
+├── Backend/                     # Django REST Framework backend
+│   ├── config/                  # Django project configuration
+│   │   ├── settings.py          # Settings (PostgreSQL DATABASES, Auth, DRF)
+│   │   ├── urls.py              # Central URL routing
+│   │   ├── wsgi.py / asgi.py
+│   ├── core/                    # Cross-app utilities
+│   │   ├── authentication.py    # BearerTokenAuthentication
+│   │   ├── database.py          # UTC datetime helpers
+│   │   ├── exceptions.py        # Custom exception handler
+│   │   ├── helpers.py           # RouteOptimizer, 2-Opt, Haversine, PIP
+│   │   └── serializers.py       # Entity serialization formatters
+│   ├── apps/
+│   │   ├── authentication/      # User model, token auth, OTP reset
+│   │   ├── centers/             # Hub management & order reassignment
+│   │   ├── vehicles/            # Fleet management & RTO plates
+│   │   ├── orders/              # Orders CRUD, pagination, bulk operations
+│   │   ├── routes/              # Route generation & persistence
+│   │   └── zones/               # Voronoi service zones & PIP checks
+│   ├── scripts/
+│   │   └── migrate_from_mongo.py# MongoDB Atlas to PostgreSQL migration utility
+│   ├── tests/                   # Pytest automated test suite (33 tests)
+│   ├── Dockerfile               # Backend container configuration
+│   ├── entrypoint.sh            # Container startup & migration script
+│   └── requirements.txt         # Python dependencies
 │
-├── Landing/                         # React 19 Landing Page
-│   ├── package.json                 # Landing page dependencies
-│   ├── vite.config.js               # Vite build configuration
-│   └── src/
-│       ├── App.jsx                  # Marketing pages, login, and registration
-│       ├── components/              # Navbar, Features, Footer, Testimonials
-│       └── services/api.js          # Authentication API calls
+├── Dashboard/                   # React 19 Dispatch Dashboard
+│   ├── src/                     # Components, pages, Leaflet map, API client
+│   ├── Dockerfile               # Dashboard container configuration
+│   └── package.json
 │
-├── docs/
-│   └── screenshots/                 # Application screenshots & diagrams
-│
-├── .gitignore                       # Root git ignore specification
-└── README.md                        # Master project documentation
+└── Landing/                     # React 19 Landing Page
+    ├── src/                     # Components, registration, login
+    ├── Dockerfile               # Landing container configuration
+    └── package.json
 ```
 
 ---
 
-## Docker Setup (Recommended)
+## Docker Compose Setup (Recommended)
 
-> **MongoDB is hosted on MongoDB Atlas (cloud) — no local MongoDB container is started.**
+Routiqo runs completely through Docker Compose with 4 coordinated services:
+- **`db`**: PostgreSQL 16 (persistent named volume `postgres_data`, automatic health check).
+- **`backend`**: Django REST API on port `8000` (waits for `db` health check before executing migrations and launching server).
+- **`landing`**: React 19 Landing page on port `5173`.
+- **`dashboard`**: React 19 Dashboard on port `5174`.
 
-This is the fastest way to run the entire Routiqo stack on Linux Mint with a single command.
-
-### Prerequisites
-
-| Tool | Minimum Version | Install |
-|------|----------------|---------|
-| Docker Engine | 24.x | `sudo apt install docker.io` or [Docker docs](https://docs.docker.com/engine/install/ubuntu/) |
-| Docker Compose plugin | 2.20+ | Included with Docker Desktop / `sudo apt install docker-compose-plugin` |
-| MongoDB Atlas account | — | [cloud.mongodb.com](https://cloud.mongodb.com) |
-
-Verify installation:
-
-```bash
-docker --version
-docker compose version
-```
-
----
-
-### Step 1 — MongoDB Atlas Database Setup
-
-1. Log into [MongoDB Atlas](https://cloud.mongodb.com).
-2. **Create a database user** (or confirm your user exists):
-   - Go to **Security → Database Access**.
-   - Your Atlas username is `codingweb00_db_user`.
-   - If you need to reset the password, click **Edit** → **Edit Password** → **Autogenerate** or enter a new one.
-3. **Allow your IP address** (required for Docker outbound connections):
-   - Go to **Security → Network Access**.
-   - Click **Add IP Address**.
-   - For development: click **Allow Access From Anywhere** (`0.0.0.0/0`).
-   - For production: enter your specific server IP address.
-
----
-
-### Step 2 — Create `Backend/.env`
-
-```bash
-cp Backend/.env.example Backend/.env
-```
-
-Open `Backend/.env` and replace `<PASSWORD>` in `MONGODB_URI` with your Atlas database password:
-
-```dotenv
-DJANGO_SECRET_KEY=django-insecure-change-this-in-production
-DEBUG=True
-ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,backend
-
-# MongoDB Atlas — replace <PASSWORD> with your real password
-DB_CONNECTION=mongodb
-MONGODB_URI=mongodb+srv://codingweb00_db_user:<PASSWORD>@routeops.sc1qjqn.mongodb.net/logiroute?retryWrites=true&w=majority
-MONGODB_DATABASE=logiroute
-
-CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174
-CORS_ALLOW_ALL_ORIGINS=False
-OSRM_ENDPOINT=https://router.project-osrm.org
-APP_NAME=Routiqo
-APP_URL=http://localhost:8000
-
-EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USE_TLS=True
-EMAIL_HOST_USER=
-EMAIL_HOST_PASSWORD=
-DEFAULT_FROM_EMAIL=hello@example.com
-```
-
-> **Important**: `Backend/.env` is listed in `.gitignore` and will never be committed to Git.
-
----
-
-### Step 3 — Build and Start All Services
+### One-Command Startup
 
 ```bash
 docker compose up --build
 ```
 
-This builds and starts three containers:
-- `routiqo-backend` — Django REST API on port `8000`
-- `routiqo-landing` — React Landing page on port `5173`
-- `routiqo-dashboard` — React Dashboard on port `5174`
-
-To run in detached (background) mode:
+To run in the background (detached mode):
 
 ```bash
 docker compose up --build -d
 ```
 
----
-
-### Step 4 — Verify Everything Is Running
-
-| Check | Command |
-|-------|---------|
-| Container status | `docker compose ps` |
-| All logs streaming | `docker compose logs -f` |
-| Backend logs only | `docker compose logs -f backend` |
-| Landing logs only  | `docker compose logs -f landing` |
-| Dashboard logs only | `docker compose logs -f dashboard` |
-
-**Application URLs:**
-
-| Service | URL |
-|---------|-----|
-| Landing Page | [http://localhost:5173](http://localhost:5173) |
-| Dashboard | [http://localhost:5174](http://localhost:5174) |
-| Backend API | [http://localhost:8000](http://localhost:8000) |
-| Backend Health | [http://localhost:8000/up](http://localhost:8000/up) |
-
----
-
-### Step 5 — Stop Containers
+### Inspecting Logs
 
 ```bash
+# Stream all logs
+docker compose logs -f
+
+# Inspect individual services
+docker compose logs -f backend
+docker compose logs -f db
+docker compose logs -f dashboard
+docker compose logs -f landing
+```
+
+### Checking Container Health
+
+```bash
+docker compose ps
+```
+
+All 4 services will report `running` and `db` will report `healthy`.
+
+### Stopping Containers
+
+```bash
+# Stop all services
 docker compose down
+
+# Stop and remove persistent database volume (warning: erases local data)
+docker compose down -v
 ```
 
-To stop and remove built images:
+### Application URLs
 
-```bash
-docker compose down --rmi all
-```
+| Service | Browser URL | Port |
+|---|---|---|
+| **Landing Page** | [http://localhost:5173](http://localhost:5173) | `5173` |
+| **Dashboard** | [http://localhost:5174](http://localhost:5174) | `5174` |
+| **Backend API** | [http://localhost:8000/api](http://localhost:8000/api) | `8000` |
+| **Health Check** | [http://localhost:8000/up](http://localhost:8000/up) | `8000` |
 
 ---
 
-### Verify MongoDB Atlas Connectivity
+## Local Linux Mint Setup
 
-After containers are running, test the Atlas connection from inside the backend container:
+### 1. Prerequisites Installation
 
-```bash
-docker compose exec backend python manage.py check_mongo
-```
-
-Expected output on success:
-```
-Connecting to MongoDB at: mongodb+srv://codingweb00_db_user:****@routeops.sc1qjqn.mongodb.net/logiroute...
-Target Database: logiroute
-[OK] Successfully connected to MongoDB Atlas!
-[OK] Database 'logiroute' collections: ['users', 'orders', ...]
-```
-
----
-
-### Troubleshooting
-
-#### `bad auth : authentication failed`
-
-Your Atlas password in `Backend/.env` is incorrect or contains special characters that need URL-encoding.
-
-- Reset the password in Atlas → **Security → Database Access → Edit**.
-- Special characters in passwords (e.g. `@`, `#`, `$`) must be [percent-encoded](https://www.urlencoder.org/) in the URI.
-
-#### `ServerSelectionTimeoutError` or connection timeout
-
-Your IP address is not in the Atlas Network Access list.
-
-- Go to Atlas → **Security → Network Access → Add IP Address**.
-- Use `0.0.0.0/0` during development (remove it in production).
-
-#### `ModuleNotFoundError: No module named 'dns'`
-
-`dnspython` was not installed. This is added automatically in `requirements.txt` — rebuild the image:
+Install Python 3.12+, Node.js 22+, and Docker on Linux Mint / Ubuntu:
 
 ```bash
-docker compose build --no-cache backend
+sudo apt update
+sudo apt install -y python3-pip python3-venv git curl build-essential libpq-dev
+
+# Install Docker & Docker Compose plugin
+sudo apt install -y docker.io docker-compose-v2
+
+# Allow running docker without sudo
+sudo usermod -aG docker $USER
+newgrp docker
 ```
 
-#### Port already in use (`bind: address already in use`)
-
-Another process is using port `8000`, `5173`, or `5174`. Stop it:
-
+Verify installations:
 ```bash
-# Find and kill the process using port 8000
-sudo lsof -ti :8000 | xargs kill -9
+python3 --version
+docker --version
+docker compose version
 ```
 
-Or stop any existing Docker containers from a previous run:
-
-```bash
-docker compose down
-```
-
-#### Frontend cannot connect to backend (`Network Error` in browser console)
-
-Vite environment variables are injected at **container startup**, not build time. The variable `VITE_API_URL=http://localhost:8000/api` is intentionally `localhost` — this is the address **the browser** uses to reach the backend, not Docker's internal hostname.
-
-Verify by checking the browser's Network tab for requests to `http://localhost:8000/api/...`.
-
-#### Django `ALLOWED_HOSTS` error
-
-Ensure `Backend/.env` contains:
-
-```dotenv
-ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,backend
-```
-
----
-
-## Installation and Local Setup
-
-### Prerequisites
-
-- **Python**: `3.12+`
-- **Node.js**: `20.x` or `22.x+` (NPM `10.x+`)
-- **MongoDB**: Local MongoDB server on port `27017` or a MongoDB Atlas connection URI
-- **Git**: Installed on your system
-
----
-
-### Step 1: Clone the Repository
+### 2. Running via Docker Compose
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/Routiqo.git
 cd Routiqo
+docker compose up --build
 ```
 
----
+### 3. Running Locally Without Docker (Standalone Mode)
 
-### Step 2: Backend Setup (Django)
+If you prefer running services directly on your host machine:
 
+#### Step 3.1: PostgreSQL Setup
 ```bash
-# Create and activate Python virtual environment
+sudo apt install -y postgresql postgresql-contrib
+sudo systemctl start postgresql
+
+# Create database and user
+sudo -u postgres psql -c "CREATE USER routiqo_user WITH PASSWORD 'routiqo_password';"
+sudo -u postgres psql -c "CREATE DATABASE routiqo OWNER routiqo_user;"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE routiqo TO routiqo_user;"
+```
+
+#### Step 3.2: Backend Setup
+```bash
 python3 -m venv .venv
-
-# On Linux / macOS:
 source .venv/bin/activate
-
-# On Windows:
-.venv\Scripts\activate
-
-# Install backend dependencies
 cd Backend
 pip install -r requirements.txt
 
-# Configure environment file
+# Create environment configuration
 cp .env.example .env
 
-# Run database synchronization for Django internal tables
+# Verify database connection
+python manage.py check_db
+
+# Apply migrations
 python manage.py migrate
 
-# Perform Django configuration check
-python manage.py check
+# Run tests
+pytest -v
 
-# Start Django development server
+# Start development server
 python manage.py runserver 0.0.0.0:8000
 ```
 
-The Django REST API is live at `http://localhost:8000`.  
-Health check verification: `http://localhost:8000/up`
-
----
-
-### Step 3: Landing Page Setup (React)
-
-Open a new terminal window:
-
+#### Step 3.3: Frontend Setup
+In separate terminals:
 ```bash
-cd Landing
+# Landing Page
+cd Landing && npm install && npm run dev -- --port 5173
 
-# Install Node dependencies
-npm install
-
-# Configure environment
-cp .env.example .env.local
-
-# Start Vite dev server
-npm run dev -- --port 5173
+# Dashboard
+cd Dashboard && npm install && npm run dev -- --port 5174
 ```
 
-The Landing page is live at `http://localhost:5173`.
-
 ---
 
-### Step 4: Dashboard Setup (React)
+## Environment Configuration
 
-Open another terminal window:
-
-```bash
-cd Dashboard
-
-# Install Node dependencies
-npm install
-
-# Configure environment
-cp .env.example .env.local
-
-# Start Vite dev server
-npm run dev -- --port 5174
-```
-
-The Dashboard is live at `http://localhost:5174`.
-
----
-
-## Environment Variables
-
-### Backend (`Backend/.env`)
+Copy `Backend/.env.example` to `Backend/.env`:
 
 ```dotenv
-# Django Configuration
-DJANGO_SECRET_KEY=your_secure_django_secret_key_here
+# Django Application Configuration
+DJANGO_SECRET_KEY=your-secure-secret-key-here
 DEBUG=True
-ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
+ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,backend
 
-# MongoDB Configuration
-MONGODB_URI=mongodb://localhost:27017
-MONGODB_DATABASE=logiroute
+# PostgreSQL Database Configuration
+DB_HOST=db             # Use 'localhost' if running outside Docker
+DB_PORT=5432
+DB_NAME=routiqo
+DB_USER=routiqo_user
+DB_PASSWORD=routiqo_password
 
-# CORS Allowed Origins
+# CORS Configuration
 CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174
 CORS_ALLOW_ALL_ORIGINS=False
 
-# External Routing & Geocoding
+# OSRM Service Endpoint
 OSRM_ENDPOINT=https://router.project-osrm.org
+
+# Application Metadata
 APP_NAME=Routiqo
 APP_URL=http://localhost:8000
-
-# Email (SMTP Configuration for Password Reset OTP)
-EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USE_TLS=True
-EMAIL_HOST_USER=
-EMAIL_HOST_PASSWORD=
-DEFAULT_FROM_EMAIL=noreply@routiqo.com
-```
-
-### Dashboard (`Dashboard/.env.local`)
-
-```dotenv
-VITE_API_URL=http://localhost:8000/api
-VITE_LANDING_URL=http://localhost:5173
-VITE_DASHBOARD_URL=http://localhost:5174
-VITE_APP_NAME=Routiqo
-```
-
-### Landing Page (`Landing/.env.local`)
-
-```dotenv
-VITE_API_URL=http://localhost:8000/api
-VITE_LANDING_URL=http://localhost:5173
-VITE_DASHBOARD_URL=http://localhost:5174
-VITE_APP_NAME=Routiqo
 ```
 
 ---
 
-## Application Workflow
+## Importing Existing MongoDB Atlas Data
 
-1. **Authentication**: Users register on the Landing page (`:5173`). Credentials are verified and a Bearer token is issued.
-2. **Hub Initialization**: The dispatcher creates distribution hubs (name, latitude, longitude) on the Dashboard (`:5174`).
-3. **Territory Tessellation**: As soon as two or more hubs exist, the dashboard calculates a Voronoi diagram using D3-Delaunay, partitioning the area into distinct territories and saving them to the backend.
-4. **Order Ingestion & Geocoding**: Orders are entered with addresses. If coordinates are absent, Nominatim geocodes them. Orders within 10 km of a hub are assigned; others remain pending.
-5. **Dynamic Fleet Allocation**: Vehicles are provisioned with capacities. Orders for a selected delivery date are clustered among available vehicles using a fair-share ceiling calculation.
-6. **Route Optimization**:
-   - Priority deliveries are grouped and sequenced first.
-   - Initial tours are constructed using nearest-neighbor greedy selection.
-   - A 2-opt local search pass reverses sub-tours to untangle crossing paths and reduce distance.
-7. **OSRM Geometry & ETA Calculation**: Stops are dispatched to OSRM to obtain turn-by-turn driving polylines. Arrival ETAs are computed based on vehicle speed and a 3-minute dwell time per stop.
-8. **Interactive Visual Dispatch & Playback**: The dispatcher views vehicles, hubs, and customer stops on the Leaflet map and can trigger simulated rider movement along the OSRM polyline.
+If you have existing data in MongoDB Atlas (`routeops.sc1qjqn.mongodb.net / logiroute`), a safe data migration utility is provided at `Backend/scripts/migrate_from_mongo.py`.
 
----
+### Migration Guarantees
+- **Read-Only**: Connects to MongoDB Atlas using read operations; never deletes or modifies MongoDB records.
+- **Foreign Key Preservation**: Maps `ObjectId` values to integer primary keys and rebuilds relational foreign keys across all 8 tables.
+- **Password Compatibility**: Preserves original bcrypt password hashes ($2y$ / $2b$).
+- **Idempotent**: Supports repeated runs; skips existing records without duplicate conflicts.
 
-## Algorithms and Engineering Details
+### Running Data Migration
 
-### 1. Voronoi Spatial Partitioning
+```bash
+cd Backend
 
-Given a set of delivery hubs $H = \{h_1, h_2, \dots, h_k\}$, a Voronoi diagram partitions $\mathbb{R}^2$ into cells $V(h_i)$ such that:
+# 1. Install PyMongo for the migration tool (if not already installed)
+pip install pymongo dnspython
 
-$$V(h_i) = \{ p \in \mathbb{R}^2 \mid d(p, h_i) \le d(p, h_j), \; \forall j \ne i \}$$
+# 2. Set Atlas credentials
+export MONGODB_URI="mongodb+srv://<USER>:<PASSWORD>@routeops.sc1qjqn.mongodb.net/logiroute?retryWrites=true&w=majority"
+export MONGODB_DATABASE="logiroute"
 
-Where $d(p, h)$ denotes the Euclidean or geodesic distance. Any order placed within $V(h_i)$ is geometrically closest to hub $h_i$. In Routiqo, these polygons are computed on the client via `d3-delaunay` and stored in MongoDB. Ray-casting point-in-polygon checks confirm containment.
+# 3. Preview import in dry-run mode
+python scripts/migrate_from_mongo.py --dry-run
 
-### 2. Haversine Distance Formula
-
-All inter-stop distances compute geodesic surface distance on an Earth sphere radius $R = 6371.0\text{ km}$:
-
-$$\Delta\sigma = 2 \arcsin \left( \sqrt{\sin^2\left(\frac{\Delta\phi}{2}\right) + \cos\phi_1 \cos\phi_2 \sin^2\left(\frac{\Delta\lambda}{2}\right)} \right)$$
-
-$$d = R \cdot \Delta\sigma$$
-
-### 3. Nearest-Neighbor Heuristic
-
-To construct an initial tour from depot $h_0$ visiting orders $O$:
-1. Current point $p \leftarrow h_0$, unvisited set $U \leftarrow O$.
-2. While $U \ne \emptyset$, select $o^* = \arg\min_{o \in U} d(p, o)$.
-3. Tie-breaking prioritizes orders tagged `priority`.
-4. Append $o^*$ to tour, $p \leftarrow o^*$, $U \leftarrow U \setminus \{o^*\}$.
-5. Return to depot $h_0$.
-
-Time complexity: $\mathcal{O}(n^2)$.
-
-### 4. 2-Opt Tour Improvement
-
-The 2-opt heuristic iteratively removes two non-adjacent edges $(u_i, u_{i+1})$ and $(u_j, u_{j+1})$ from the tour and reconnects $(u_i, u_j)$ and $(u_{i+1}, u_{j+1})$ by reversing the segment between $i+1$ and $j$. If:
-
-$$d(u_i, u_j) + d(u_{i+1}, u_{j+1}) < d(u_i, u_{i+1}) + d(u_j, u_{j+1}) - \epsilon$$
-
-the reversal is accepted and the tour is updated. This eliminates path self-intersections and reduces total tour distance.
+# 4. Perform actual migration
+python scripts/migrate_from_mongo.py --skip-existing
+```
 
 ---
 
-## API Documentation
+## Database Persistence and Backups
 
-All routes are prefixed with `/api/` (except root health checks) and return JSON.
+The PostgreSQL container stores data in a named Docker volume (`postgres_data`), ensuring data survives container restarts and image rebuilds.
 
-### Authentication Endpoints
+### Backing Up the Database
 
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `POST` | `/api/auth/register` | Public | Register new user account (`name`, `email`, `password`) |
-| `POST` | `/api/auth/login` | Public | Authenticate user; returns Sanctum-compatible Bearer token |
-| `POST` | `/api/auth/forgot-password` | Public | Generate and email 6-digit password reset OTP (valid 15 mins) |
-| `POST` | `/api/auth/verify-otp` | Public | Verify validity of 6-digit OTP code |
-| `POST` | `/api/auth/reset-password` | Public | Reset password using verified OTP and revoke existing tokens |
-| `POST` | `/api/logout` | Bearer | Revoke active access token |
-| `GET` | `/api/user` | Bearer | Fetch authenticated user profile |
+```bash
+docker compose exec db pg_dump -U routiqo_user -d routiqo > routiqo_backup.sql
+```
 
-### Delivery Centers (Hubs)
+### Restoring from a Backup
 
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `GET` | `/api/centers` | Bearer | List all delivery hubs for authenticated user |
-| `POST` | `/api/centers` | Bearer | Create a new hub; captures unassigned orders within 10 km |
-| `PATCH` | `/api/centers/<id>` | Bearer | Update hub details (`name`, `latitude`, `longitude`) |
-| `DELETE` | `/api/centers/<id>` | Bearer | Cascade delete hub, its vehicles, and reassign orders |
-
-### Fleet Vehicles
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `GET` | `/api/vehicles` | Bearer | List vehicles; optionally filter by `?delivery_center_id=` |
-| `POST` | `/api/vehicles` | Bearer | Create vehicle; auto-generates RTO vehicle number |
-| `PATCH` | `/api/vehicles/<id>` | Bearer | Update vehicle capacity, speed, or availability |
-| `DELETE` | `/api/vehicles/<id>` | Bearer | Delete vehicle and clean up associated planned routes |
-| `POST` | `/api/vehicles/reset-fleet`| Bearer | Reset all vehicle loads to 0 and set `is_available: true` |
-
-### Orders
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `GET` | `/api/orders` | Bearer | Paginated order list (`status`, `date`, `delivery_center_id`) |
-| `POST` | `/api/orders` | Bearer | Create order; geocodes address and auto-assigns nearest hub |
-| `PATCH` | `/api/orders/<id>` | Bearer | Update order properties (`priority`, `delivery_date`, `address`)|
-| `DELETE` | `/api/orders/<id>` | Bearer | Delete single order document |
-| `DELETE` | `/api/orders` | Bearer | Bulk delete orders; optionally filtered by `?date=` |
-| `POST` | `/api/orders/<id>/assign` | Bearer | Manually assign an order to its nearest hub (fails if > 10 km) |
-| `GET` | `/api/orders/date-counts` | Bearer | Daily order counts for calendar view (`?year=&month=`) |
-| `GET` | `/api/orders/bulk-counts` | Bearer | Summary counts (`completed`, `pending`, `total`) for date |
-| `DELETE` | `/api/orders/clear-by-date`| Bearer | Clear all orders for specified `?date=` |
-| `DELETE` | `/api/orders/completed` | Bearer | Delete all delivered orders |
-| `DELETE` | `/api/orders/pending` | Bearer | Delete all pending orders |
-| `POST` | `/api/orders/mark-all-delivered` | Bearer | Mark all active orders for date as delivered |
-
-### Route Optimization & Service Zones
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `GET` | `/api/routes` | Bearer | List all optimized routes |
-| `POST` | `/api/routes/generate` | Bearer | Optimize and generate routes for date and optional hub |
-| `GET` | `/api/routes/<id>` | Bearer | Get route details with sequenced stops and OSRM geometry |
-| `POST` | `/api/routes/regenerate/<center_id>` | Bearer | Clear and regenerate routes for a specific delivery hub |
-| `POST` | `/api/routes/vehicle/<id>/generate` | Bearer | Generate optimized route for a specific vehicle |
-| `DELETE` | `/api/routes/clear` | Bearer | Clear planned routes and revert orders to pending |
-| `GET` | `/api/zones` | Bearer | Retrieve saved Voronoi service zones |
-| `POST` | `/api/zones/generate` | Bearer | Replace persisted Voronoi polygon coordinate sets |
-| `GET` | `/api/zones/check` | Bearer | Test point-in-polygon containment (`?lat=&lng=`) |
-
-### System Health
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `GET` | `/` | Public | Root backend health check (`{"status": "Routiqo Backend Running"}`) |
-| `GET` | `/up` | Public | System uptime check (`{"status": "ok"}`) |
-| `GET` | `/api/up` | Public | API namespace uptime check |
+```bash
+cat routiqo_backup.sql | docker compose exec -T db psql -U routiqo_user -d routiqo
+```
 
 ---
 
 ## Testing
 
-The backend includes a comprehensive automated test suite powered by `pytest` and `pytest-django`, running with `mongomock` for isolated, network-independent execution.
+The backend includes a comprehensive automated test suite running directly against PostgreSQL:
 
 ```bash
 cd Backend
@@ -736,49 +552,44 @@ source ../.venv/bin/activate
 pytest -v
 ```
 
-### Verified Test Suite Breakdown (31 Tests Passing)
+### Test Suite Coverage (33 Passing Tests)
 
-- `test_auth.py` (11 tests): Registration, duplicate prevention, password validation, login, token revocation, profile access, and OTP password reset lifecycle.
-- `test_centers.py` (4 tests): Center creation, coordinate validation, updates, and cascade deletion order reassignment.
-- `test_vehicles.py` (5 tests): Automatic RTO number generation, capacity constraints, status toggling, and fleet resets.
-- `test_orders.py` (5 tests): Auto-assignment within 10 km, out-of-range pending rules, pagination, calendar date counts, and bulk completion.
-- `test_zones.py` (1 test): Voronoi polygon storage and point-in-polygon ray-casting query validation.
-- `test_optimization.py` (5 tests): Haversine distance, nearest-neighbor sequence ordering, total tour distance, route timing calculator, and point-in-polygon containment checks.
-
----
-
-## Engineering Decisions
-
-1. **Django REST Framework over Microframeworks**: DRF provides robust serialization, permission controls, and URL routing, making the backend maintainable and extensible.
-2. **Direct PyMongo Integration**: Rather than forcing an ORM onto a non-relational database, PyMongo allows direct document operations with dual `ObjectId` and string compatibility, preserving original MongoDB document integrity.
-3. **Client-Side Voronoi (D3-Delaunay)**: Computing Voronoi polygons in the browser prevents server-side rendering bottlenecks and enables instant interactive territory feedback when hubs are moved.
-4. **Nearest-Neighbor + 2-Opt over Exact Solvers**: For typical last-mile delivery instances ($n \le 100$ stops per vehicle), exact VRP/TSP solvers introduce unacceptable latency. The 2-opt heuristic runs in milliseconds and delivers high-quality route plans.
-5. **Simulated Movement vs. Live GPS**: Vehicle movements are simulated along road polylines for planning and route inspection, clearly distinguished from live telemetry tracking.
+- **`test_auth.py`** (11 tests): Registration, duplicate prevention, password validation, login, token revocation, profile access, and OTP password reset lifecycle.
+- **`test_centers.py`** (4 tests): Center creation, coordinate validation, updates, and cascade deletion order reassignment.
+- **`test_vehicles.py`** (5 tests): Automatic RTO number generation, capacity constraints, status toggling, and fleet resets.
+- **`test_orders.py`** (5 tests): Auto-assignment within 10 km, out-of-range pending rules, pagination, calendar date counts, and bulk completion.
+- **`test_routes.py`** (2 tests): Route generation, 2-opt tour ordering, vehicle load update, route clearance, and legacy bcrypt password compatibility.
+- **`test_zones.py`** (1 test): Voronoi polygon storage and point-in-polygon ray-casting query validation.
+- **`test_optimization.py`** (5 tests): Haversine distance, nearest-neighbor sequence ordering, total tour distance, route timing calculator, and point-in-polygon containment checks.
 
 ---
 
-## Limitations
+## Troubleshooting Common Errors
 
-- **Simulated Playback**: Vehicle tracking on the map is a client-side playback simulation along the OSRM path, not real-time GPS telemetry.
-- **Demo Routing Service**: The default OSRM endpoint (`router.project-osrm.org`) is a rate-limited public demo server. Production deployments should point `OSRM_ENDPOINT` to a dedicated self-hosted OSRM instance.
-- **Geocoding Usage Policy**: Nominatim requires a valid `User-Agent` and imposes a 1 request/second rate limit.
-- **Traffic Awareness**: OSRM computes distances based on road topologies and default speed profiles; real-time dynamic traffic congestion is not currently integrated.
+### 1. `Connection to db:5432 failed: Connection refused`
+- **Cause**: PostgreSQL has not finished initializing or the container is unhealthy.
+- **Solution**: The backend `entrypoint.sh` automatically retries connection for 30 seconds. Run `docker compose ps` to inspect container state and `docker compose logs db` for PostgreSQL initialization messages.
 
----
+### 2. `FATAL: password authentication failed for user "routiqo_user"`
+- **Cause**: Discrepancy between `POSTGRES_PASSWORD` in `docker-compose.yml` and `DB_PASSWORD` in `Backend/.env`.
+- **Solution**: Verify that both files match. If resetting credentials on an existing volume, run `docker compose down -v` to re-initialize the volume.
 
-## Roadmap
+### 3. `django.db.utils.ProgrammingError: relation "..." does not exist`
+- **Cause**: Migrations were not applied to the active database.
+- **Solution**: Apply migrations manually via `docker compose exec backend python manage.py migrate` or restart the backend container.
 
-- [ ] Real-time vehicle GPS tracking via WebSocket connections (Django Channels).
-- [ ] Multi-depot vehicle routing (MDVRP) with cross-hub fleet sharing.
-- [ ] Time-window constrained routing (VRPTW) for customer-scheduled delivery slots.
-- [ ] Dynamic traffic integration via self-hosted OSRM with live traffic speed updates.
-- [ ] Mobile PWA for delivery riders with proof-of-delivery (photo/signature capture).
-- [ ] Predictive delivery demand forecasting based on historical order volume.
+### 4. `Port 8000 / 5173 / 5174 already in use`
+- **Cause**: An existing process or old container is holding the port.
+- **Solution**: Run `docker compose down` and check for host processes:
+  ```bash
+  sudo lsof -i :8000
+  sudo lsof -i :5173
+  sudo lsof -i :5174
+  ```
 
 ---
 
 ## Author
 
-**Akshat Gupta**
-
-Built as an engineering project focused on geospatial intelligence, fleet dispatch automation, and route optimization.
+**Akshat**  
+GitHub: [@akshat-ops](https://github.com/akshat-ops)

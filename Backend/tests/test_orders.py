@@ -1,8 +1,9 @@
 import pytest
 from rest_framework import status
-from core.database import db
+from apps.orders.models import Order
 
 
+@pytest.mark.django_db
 def test_create_order_auto_assigns_to_nearest_center(auth_client):
     # Center in Brooklyn
     c = auth_client.post('/api/centers', {
@@ -28,6 +29,7 @@ def test_create_order_auto_assigns_to_nearest_center(auth_client):
     assert data['priority'] == 'priority'
 
 
+@pytest.mark.django_db
 def test_create_order_out_of_range_marks_pending(auth_client):
     # Center in Brooklyn
     auth_client.post('/api/centers', {
@@ -50,12 +52,13 @@ def test_create_order_out_of_range_marks_pending(auth_client):
     assert data['delivery_center_id'] is None
 
 
+@pytest.mark.django_db
 def test_orders_pagination_and_filters(auth_client):
-    c = auth_client.post('/api/centers', {
+    auth_client.post('/api/centers', {
         'name': 'Hub 1',
         'latitude': 40.6782,
         'longitude': -73.9442,
-    }, format='json').json()['data']
+    }, format='json')
 
     for i in range(5):
         auth_client.post('/api/orders', {
@@ -73,6 +76,7 @@ def test_orders_pagination_and_filters(auth_client):
     assert data['meta']['last_page'] == 3
 
 
+@pytest.mark.django_db
 def test_order_date_counts_and_bulk_counts(auth_client):
     for i in range(3):
         auth_client.post('/api/orders', {
@@ -94,6 +98,7 @@ def test_order_date_counts_and_bulk_counts(auth_client):
     assert bc['pending'] == 3
 
 
+@pytest.mark.django_db
 def test_order_mark_all_delivered_and_clear_by_date(auth_client):
     for i in range(3):
         auth_client.post('/api/orders', {
@@ -111,5 +116,4 @@ def test_order_mark_all_delivered_and_clear_by_date(auth_client):
     del_comp = auth_client.delete('/api/orders/completed?date=2026-05-05')
     assert del_comp.status_code == status.HTTP_200_OK
     assert del_comp.json()['deleted_count'] == 3
-    assert db.orders.count_documents({}) == 0
-
+    assert Order.objects.filter(status=Order.STATUS_DELIVERED).count() == 0

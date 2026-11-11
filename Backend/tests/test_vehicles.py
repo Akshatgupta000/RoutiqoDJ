@@ -1,8 +1,9 @@
 import pytest
 from rest_framework import status
-from core.database import db
+from apps.vehicles.models import Vehicle
 
 
+@pytest.mark.django_db
 def test_create_vehicle_with_auto_generated_number(auth_client):
     c = auth_client.post('/api/centers', {
         'name': 'Lucknow Depot',
@@ -27,6 +28,7 @@ def test_create_vehicle_with_auto_generated_number(auth_client):
     assert data['vehicle_number'].startswith('UP32')
 
 
+@pytest.mark.django_db
 def test_vehicle_validation_invalid_capacity(auth_client):
     c = auth_client.post('/api/centers', {
         'name': 'Central Depot',
@@ -43,6 +45,7 @@ def test_vehicle_validation_invalid_capacity(auth_client):
     assert 'capacity' in response.json()['errors']
 
 
+@pytest.mark.django_db
 def test_list_and_update_vehicle(auth_client):
     c = auth_client.post('/api/centers', {
         'name': 'Noida Depot',
@@ -67,6 +70,7 @@ def test_list_and_update_vehicle(auth_client):
     assert patch_res.json()['data']['capacity'] == 20
 
 
+@pytest.mark.django_db
 def test_reset_fleet(auth_client):
     c = auth_client.post('/api/centers', {
         'name': 'Delhi Hub',
@@ -81,17 +85,21 @@ def test_reset_fleet(auth_client):
     }, format='json').json()['data']
 
     # Manually set vehicle unavailable and load
-    db.vehicles.update_one({'_id': db.vehicles.find_one()['_id']}, {'$set': {'is_available': False, 'current_load': 10}})
+    v_obj = Vehicle.objects.get(id=v['id'])
+    v_obj.is_available = False
+    v_obj.current_load = 10
+    v_obj.save()
 
     reset_res = auth_client.post('/api/vehicles/reset-fleet', {'delivery_center_id': c['id']}, format='json')
     assert reset_res.status_code == status.HTTP_200_OK
     assert reset_res.json()['message'] == 'Fleet and active routes reset successful'
 
-    v_after = db.vehicles.find_one()
-    assert v_after['is_available'] is True
-    assert v_after['current_load'] == 0
+    v_after = Vehicle.objects.get(id=v['id'])
+    assert v_after.is_available is True
+    assert v_after.current_load == 0
 
 
+@pytest.mark.django_db
 def test_delete_vehicle(auth_client):
     c = auth_client.post('/api/centers', {
         'name': 'Hub X',
@@ -107,5 +115,4 @@ def test_delete_vehicle(auth_client):
 
     del_res = auth_client.delete(f"/api/vehicles/{v['id']}")
     assert del_res.status_code == status.HTTP_204_NO_CONTENT
-    assert db.vehicles.count_documents({}) == 0
-
+    assert Vehicle.objects.filter(id=v['id']).count() == 0

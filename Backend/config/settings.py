@@ -24,11 +24,11 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
+
     # Third party apps
     'corsheaders',
     'rest_framework',
-    
+
     # Local apps
     'apps.authentication',
     'apps.centers',
@@ -70,17 +70,48 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
-# SQLite for internal Django components (auth/sessions) if needed
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
+# Database configuration (PostgreSQL default)
+DB_ENGINE = os.getenv('DB_ENGINE', 'django.db.backends.postgresql')
+DB_NAME = os.getenv('DB_NAME', os.getenv('POSTGRES_DB', 'routiqo'))
+DB_USER = os.getenv('DB_USER', os.getenv('POSTGRES_USER', 'routiqo_user'))
+DB_PASSWORD = os.getenv('DB_PASSWORD', os.getenv('POSTGRES_PASSWORD', 'routiqo_password'))
+DB_HOST = os.getenv('DB_HOST', 'localhost')
+DB_PORT = os.getenv('DB_PORT', '5432')
 
-# MongoDB Primary Database configuration
-MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017')
-MONGODB_DATABASE = os.getenv('MONGODB_DATABASE', 'logiroute')
+if DB_ENGINE == 'django.db.backends.sqlite3':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / (DB_NAME if DB_NAME.endswith('.sqlite3') else f"{DB_NAME}.sqlite3"),
+        }
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': DB_NAME,
+            'USER': DB_USER,
+            'PASSWORD': DB_PASSWORD,
+            'HOST': DB_HOST,
+            'PORT': DB_PORT,
+        }
+    }
+
+# Custom User Model
+AUTH_USER_MODEL = 'authentication.User'
+
+# Authentication Backends
+AUTHENTICATION_BACKENDS = [
+    'apps.authentication.backends.CaseInsensitiveEmailAuthBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+# Password Hashers (Supports PBKDF2, Bcrypt legacy compatibility, and BCryptSHA256)
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'apps.authentication.backends.BcryptPasswordHasher',
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+]
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -141,4 +172,3 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER or 'hello@e
 
 # Do not append slashes to API endpoints automatically
 APPEND_SLASH = False
-

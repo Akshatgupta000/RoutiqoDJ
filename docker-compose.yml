@@ -1,13 +1,39 @@
 services:
 
+  db:
+    image: postgres:16-alpine
+    container_name: routiqo-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-routiqo}
+      POSTGRES_USER: ${POSTGRES_USER:-routiqo_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-routiqo_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-routiqo_user} -d $${POSTGRES_DB:-routiqo}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build: ./Backend
     container_name: routiqo-backend
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     env_file:
       - path: ./Backend/.env
-        required: true
+        required: false
     environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-${POSTGRES_DB:-routiqo}}
+      DB_USER: ${DB_USER:-${POSTGRES_USER:-routiqo_user}}
+      DB_PASSWORD: ${DB_PASSWORD:-${POSTGRES_PASSWORD:-routiqo_password}}
       ALLOWED_HOSTS: "localhost,127.0.0.1,0.0.0.0,backend"
       CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:5174"
     ports:
@@ -42,3 +68,6 @@ services:
       VITE_APP_NAME: "Routiqo"
     ports:
       - "5174:5174"
+
+volumes:
+  postgres_data:
