@@ -1,0 +1,44 @@
+services:
+
+  backend:
+    build: ./Backend
+    container_name: routiqo-backend
+    restart: unless-stopped
+    env_file:
+      - path: ./Backend/.env
+        required: true
+    environment:
+      ALLOWED_HOSTS: "localhost,127.0.0.1,0.0.0.0,backend"
+      CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:5174"
+    ports:
+      - "8000:8000"
+
+  landing:
+    build: ./Landing
+    container_name: routiqo-landing
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      # Vite variables are embedded at startup; these must resolve from the
+      # browser's perspective (localhost), NOT from inside the Docker network.
+      VITE_API_URL: "http://localhost:8000/api"
+      VITE_LANDING_URL: "http://localhost:5173"
+      VITE_DASHBOARD_URL: "http://localhost:5174"
+      VITE_APP_NAME: "Routiqo"
+    ports:
+      - "5173:5173"
+
+  dashboard:
+    build: ./Dashboard
+    container_name: routiqo-dashboard
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      VITE_API_URL: "http://localhost:8000/api"
+      VITE_LANDING_URL: "http://localhost:5173"
+      VITE_DASHBOARD_URL: "http://localhost:5174"
+      VITE_APP_NAME: "Routiqo"
+    ports:
+      - "5174:5174"

@@ -1,10 +1,14 @@
 import datetime
-from typing import Any, Dict, List, Optional, Union
+import logging
+from typing import Any, Dict, List, Optional, Tuple, Union
 from bson import ObjectId
 from django.conf import settings
 from pymongo import MongoClient
 from pymongo.database import Database
 from pymongo.collection import Collection
+from pymongo.errors import PyMongoError, ServerSelectionTimeoutError, OperationFailure, ConfigurationError
+
+logger = logging.getLogger(__name__)
 
 _mongo_client: Optional[MongoClient] = None
 _mongo_db: Optional[Database] = None
@@ -13,11 +17,18 @@ _mongo_db: Optional[Database] = None
 def get_mongo_client() -> MongoClient:
     global _mongo_client
     if _mongo_client is None:
-        _mongo_client = MongoClient(
-            settings.MONGODB_URI,
-            serverSelectionTimeoutMS=10000,
-            connectTimeoutMS=10000,
-        )
+        try:
+            _mongo_client = MongoClient(
+                settings.MONGODB_URI,
+                serverSelectionTimeoutMS=10000,
+                connectTimeoutMS=10000,
+            )
+        except ConfigurationError as err:
+            logger.critical(f"MongoDB Configuration Error (check connection string format and dnspython): {err}")
+            raise
+        except Exception as err:
+            logger.critical(f"MongoDB client initialization failed: {err}")
+            raise
     return _mongo_client
 
 
@@ -25,13 +36,37 @@ def get_db() -> Database:
     global _mongo_db
     if _mongo_db is None:
         client = get_mongo_client()
-        _mongo_db = client[settings.MONGODB_DATABASE]
+        db_name = getattr(settings, 'MONGODB_DATABASE', 'logiroute') or 'logiroute'
+        _mongo_db = client[db_name]
     return _mongo_db
 
 
 def set_db(database: Any) -> None:
     global _mongo_db
     _mongo_db = database
+
+
+def check_mongo_connection() -> Tuple[bool, Optional[str]]:
+    """
+    Verifies connection to the MongoDB cluster.
+    Returns (True, None) on success, or (False, error_message) on failure.
+    """
+    try:
+        client = get_mongo_client()
+        client.admin.command('ping')
+        return True, None
+    except OperationFailure as exc:
+        msg = f"MongoDB Authentication Failed: {exc.details.get('errmsg', str(exc)) if hasattr(exc, 'details') and isinstance(exc.details, dict) else str(exc)}"
+        logger.error(msg)
+        return False, msg
+    except ServerSelectionTimeoutError as exc:
+        msg = f"MongoDB Server Selection Timeout (Check network/IP Access List): {exc}"
+        logger.error(msg)
+        return False, msg
+    except Exception as exc:
+        msg = f"MongoDB connection error: {exc}"
+        logger.error(msg)
+        return False, msg
 
 
 

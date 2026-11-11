@@ -1,7 +1,12 @@
+import logging
+from django.conf import settings
+from pymongo.errors import PyMongoError
 from rest_framework.views import exception_handler
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.exceptions import ValidationError, AuthenticationFailed, NotAuthenticated, NotFound, PermissionDenied
+
+logger = logging.getLogger(__name__)
 
 
 def custom_exception_handler(exc, context):
@@ -76,5 +81,18 @@ def custom_exception_handler(exc, context):
                 'message': str(getattr(exc, 'detail', 'This action is unauthorized.')),
             }
             response.status_code = status.HTTP_403_FORBIDDEN
+
+    elif isinstance(exc, PyMongoError):
+        logger.error(f"MongoDB database error: {exc}", exc_info=True)
+        msg = "Database connection error. Please verify MongoDB Atlas credentials and network access list."
+        detail = str(exc) if getattr(settings, 'DEBUG', False) else msg
+        response = Response(
+            {
+                'message': msg,
+                'detail': detail,
+                'error': 'database_error',
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
 
     return response

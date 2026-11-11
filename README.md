@@ -26,6 +26,7 @@ Routiqo is an intelligent, full-stack logistics management platform engineered t
 - [Technology Stack](#technology-stack)
 - [System Architecture](#system-architecture)
 - [Project Directory Structure](#project-directory-structure)
+- [Docker Setup (Recommended)](#docker-setup-recommended)
 - [Installation and Local Setup](#installation-and-local-setup)
 - [Environment Variables](#environment-variables)
 - [Application Workflow](#application-workflow)
@@ -239,6 +240,208 @@ Routiqo/
 │
 ├── .gitignore                       # Root git ignore specification
 └── README.md                        # Master project documentation
+```
+
+---
+
+## Docker Setup (Recommended)
+
+> **MongoDB is hosted on MongoDB Atlas (cloud) — no local MongoDB container is started.**
+
+This is the fastest way to run the entire Routiqo stack on Linux Mint with a single command.
+
+### Prerequisites
+
+| Tool | Minimum Version | Install |
+|------|----------------|---------|
+| Docker Engine | 24.x | `sudo apt install docker.io` or [Docker docs](https://docs.docker.com/engine/install/ubuntu/) |
+| Docker Compose plugin | 2.20+ | Included with Docker Desktop / `sudo apt install docker-compose-plugin` |
+| MongoDB Atlas account | — | [cloud.mongodb.com](https://cloud.mongodb.com) |
+
+Verify installation:
+
+```bash
+docker --version
+docker compose version
+```
+
+---
+
+### Step 1 — MongoDB Atlas Database Setup
+
+1. Log into [MongoDB Atlas](https://cloud.mongodb.com).
+2. **Create a database user** (or confirm your user exists):
+   - Go to **Security → Database Access**.
+   - Your Atlas username is `codingweb00_db_user`.
+   - If you need to reset the password, click **Edit** → **Edit Password** → **Autogenerate** or enter a new one.
+3. **Allow your IP address** (required for Docker outbound connections):
+   - Go to **Security → Network Access**.
+   - Click **Add IP Address**.
+   - For development: click **Allow Access From Anywhere** (`0.0.0.0/0`).
+   - For production: enter your specific server IP address.
+
+---
+
+### Step 2 — Create `Backend/.env`
+
+```bash
+cp Backend/.env.example Backend/.env
+```
+
+Open `Backend/.env` and replace `<PASSWORD>` in `MONGODB_URI` with your Atlas database password:
+
+```dotenv
+DJANGO_SECRET_KEY=django-insecure-change-this-in-production
+DEBUG=True
+ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,backend
+
+# MongoDB Atlas — replace <PASSWORD> with your real password
+DB_CONNECTION=mongodb
+MONGODB_URI=mongodb+srv://codingweb00_db_user:<PASSWORD>@routeops.sc1qjqn.mongodb.net/logiroute?retryWrites=true&w=majority
+MONGODB_DATABASE=logiroute
+
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174
+CORS_ALLOW_ALL_ORIGINS=False
+OSRM_ENDPOINT=https://router.project-osrm.org
+APP_NAME=Routiqo
+APP_URL=http://localhost:8000
+
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=
+EMAIL_HOST_PASSWORD=
+DEFAULT_FROM_EMAIL=hello@example.com
+```
+
+> **Important**: `Backend/.env` is listed in `.gitignore` and will never be committed to Git.
+
+---
+
+### Step 3 — Build and Start All Services
+
+```bash
+docker compose up --build
+```
+
+This builds and starts three containers:
+- `routiqo-backend` — Django REST API on port `8000`
+- `routiqo-landing` — React Landing page on port `5173`
+- `routiqo-dashboard` — React Dashboard on port `5174`
+
+To run in detached (background) mode:
+
+```bash
+docker compose up --build -d
+```
+
+---
+
+### Step 4 — Verify Everything Is Running
+
+| Check | Command |
+|-------|---------|
+| Container status | `docker compose ps` |
+| All logs streaming | `docker compose logs -f` |
+| Backend logs only | `docker compose logs -f backend` |
+| Landing logs only  | `docker compose logs -f landing` |
+| Dashboard logs only | `docker compose logs -f dashboard` |
+
+**Application URLs:**
+
+| Service | URL |
+|---------|-----|
+| Landing Page | [http://localhost:5173](http://localhost:5173) |
+| Dashboard | [http://localhost:5174](http://localhost:5174) |
+| Backend API | [http://localhost:8000](http://localhost:8000) |
+| Backend Health | [http://localhost:8000/up](http://localhost:8000/up) |
+
+---
+
+### Step 5 — Stop Containers
+
+```bash
+docker compose down
+```
+
+To stop and remove built images:
+
+```bash
+docker compose down --rmi all
+```
+
+---
+
+### Verify MongoDB Atlas Connectivity
+
+After containers are running, test the Atlas connection from inside the backend container:
+
+```bash
+docker compose exec backend python manage.py check_mongo
+```
+
+Expected output on success:
+```
+Connecting to MongoDB at: mongodb+srv://codingweb00_db_user:****@routeops.sc1qjqn.mongodb.net/logiroute...
+Target Database: logiroute
+[OK] Successfully connected to MongoDB Atlas!
+[OK] Database 'logiroute' collections: ['users', 'orders', ...]
+```
+
+---
+
+### Troubleshooting
+
+#### `bad auth : authentication failed`
+
+Your Atlas password in `Backend/.env` is incorrect or contains special characters that need URL-encoding.
+
+- Reset the password in Atlas → **Security → Database Access → Edit**.
+- Special characters in passwords (e.g. `@`, `#`, `$`) must be [percent-encoded](https://www.urlencoder.org/) in the URI.
+
+#### `ServerSelectionTimeoutError` or connection timeout
+
+Your IP address is not in the Atlas Network Access list.
+
+- Go to Atlas → **Security → Network Access → Add IP Address**.
+- Use `0.0.0.0/0` during development (remove it in production).
+
+#### `ModuleNotFoundError: No module named 'dns'`
+
+`dnspython` was not installed. This is added automatically in `requirements.txt` — rebuild the image:
+
+```bash
+docker compose build --no-cache backend
+```
+
+#### Port already in use (`bind: address already in use`)
+
+Another process is using port `8000`, `5173`, or `5174`. Stop it:
+
+```bash
+# Find and kill the process using port 8000
+sudo lsof -ti :8000 | xargs kill -9
+```
+
+Or stop any existing Docker containers from a previous run:
+
+```bash
+docker compose down
+```
+
+#### Frontend cannot connect to backend (`Network Error` in browser console)
+
+Vite environment variables are injected at **container startup**, not build time. The variable `VITE_API_URL=http://localhost:8000/api` is intentionally `localhost` — this is the address **the browser** uses to reach the backend, not Docker's internal hostname.
+
+Verify by checking the browser's Network tab for requests to `http://localhost:8000/api/...`.
+
+#### Django `ALLOWED_HOSTS` error
+
+Ensure `Backend/.env` contains:
+
+```dotenv
+ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,backend
 ```
 
 ---
