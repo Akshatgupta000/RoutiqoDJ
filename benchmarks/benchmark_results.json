@@ -1,0 +1,487 @@
+{
+    "master_seed": 42,
+    "sets": [
+        {
+            "set_number": 1,
+            "points_count": 30,
+            "riders_count": 5,
+            "osrm_status": "OK",
+            "timing": {
+                "raw_runs_ms": [
+                    23.9982,
+                    21.4818,
+                    16.5762,
+                    13.6876,
+                    13.1909
+                ],
+                "avg_total_ms": 17.78694,
+                "min_total_ms": 13.1909,
+                "max_total_ms": 23.9982,
+                "avg_alloc_ms": 1.74584,
+                "avg_route_ms": 16.0411
+            },
+            "haversine": {
+                "before_km": 105.26042447167211,
+                "after_km": 75.39631334293514,
+                "reduction_pct": 28.371642313464214
+            },
+            "osrm": {
+                "before_km": 155.07319999999999,
+                "after_km": 117.0017,
+                "reduction_pct": 24.55066381554001
+            },
+            "voronoi_spatial": {
+                "unzoned_km": 100.02905600034356,
+                "voronoi_km": 63.052793984555905,
+                "savings_pct": 36.96552131378772
+            },
+            "rider_breakdown": [
+                {
+                    "hub": "Brooklyn Distribution Hub",
+                    "rider_id": "van_bk_01",
+                    "stops_count": 5,
+                    "random_haversine_km": 13.6,
+                    "opt_haversine_km": 10.76,
+                    "reduction_haversine_pct": 20.9,
+                    "random_osrm_km": 21.77,
+                    "opt_osrm_km": 15.72,
+                    "reduction_osrm_pct": 27.81
+                },
+                {
+                    "hub": "Brooklyn Distribution Hub",
+                    "rider_id": "van_bk_02",
+                    "stops_count": 5,
+                    "random_haversine_km": 14.48,
+                    "opt_haversine_km": 12.01,
+                    "reduction_haversine_pct": 17.1,
+                    "random_osrm_km": 19.1,
+                    "opt_osrm_km": 15.93,
+                    "reduction_osrm_pct": 16.57
+                },
+                {
+                    "hub": "Brooklyn Distribution Hub",
+                    "rider_id": "van_bk_03",
+                    "stops_count": 5,
+                    "random_haversine_km": 25.5,
+                    "opt_haversine_km": 19.55,
+                    "reduction_haversine_pct": 23.36,
+                    "random_osrm_km": 32.66,
+                    "opt_osrm_km": 25.51,
+                    "reduction_osrm_pct": 21.9
+                },
+                {
+                    "hub": "Queens Fulfillment Center",
+                    "rider_id": "truck_qn_01",
+                    "stops_count": 8,
+                    "random_haversine_km": 30.06,
+                    "opt_haversine_km": 18.73,
+                    "reduction_haversine_pct": 37.69,
+                    "random_osrm_km": 44.71,
+                    "opt_osrm_km": 33.65,
+                    "reduction_osrm_pct": 24.75
+                },
+                {
+                    "hub": "Queens Fulfillment Center",
+                    "rider_id": "truck_qn_02",
+                    "stops_count": 7,
+                    "random_haversine_km": 21.61,
+                    "opt_haversine_km": 14.35,
+                    "reduction_haversine_pct": 33.59,
+                    "random_osrm_km": 36.83,
+                    "opt_osrm_km": 26.2,
+                    "reduction_osrm_pct": 28.87
+                }
+            ]
+        },
+        {
+            "set_number": 2,
+            "points_count": 35,
+            "riders_count": 5,
+            "osrm_status": "OK",
+            "timing": {
+                "raw_runs_ms": [
+                    20.3853,
+                    37.8686,
+                    21.7363,
+                    44.386,
+                    20.3179
+                ],
+                "avg_total_ms": 28.938820000000003,
+                "min_total_ms": 20.3179,
+                "max_total_ms": 44.386,
+                "avg_alloc_ms": 0.8723600000000001,
+                "avg_route_ms": 28.06646
+            },
+            "haversine": {
+                "before_km": 107.83345491009729,
+                "after_km": 71.05921983766947,
+                "reduction_pct": 34.102807058428354
+            },
+            "osrm": {
+                "before_km": 161.43449999999999,
+                "after_km": 112.6414,
+                "reduction_pct": 30.22470413697195
+            },
+            "voronoi_spatial": {
+                "unzoned_km": 108.34518588867488,
+                "voronoi_km": 60.83072753589447,
+                "savings_pct": 43.85470195381058
+            },
+            "rider_breakdown": [
+                {
+                    "hub": "Brooklyn Distribution Hub",
+                    "rider_id": "van_bk_01",
+                    "stops_count": 6,
+                    "random_haversine_km": 16.76,
+                    "opt_haversine_km": 11.49,
+                    "reduction_haversine_pct": 31.44,
+                    "random_osrm_km": 25.01,
+                    "opt_osrm_km": 17.53,
+                    "reduction_osrm_pct": 29.91
+                },
+                {
+                    "hub": "Brooklyn Distribution Hub",
+                    "rider_id": "van_bk_02",
+                    "stops_count": 6,
+                    "random_haversine_km": 13.89,
+                    "opt_haversine_km": 11.09,
+                    "reduction_haversine_pct": 20.17,
+                    "random_osrm_km": 18.9,
+                    "opt_osrm_km": 16.2,
+                    "reduction_osrm_pct": 14.31
+                },
+                {
+                    "hub": "Brooklyn Distribution Hub",
+                    "rider_id": "van_bk_03",
+                    "stops_count": 6,
+                    "random_haversine_km": 22.47,
+                    "opt_haversine_km": 14.41,
+                    "reduction_haversine_pct": 35.87,
+                    "random_osrm_km": 34.31,
+                    "opt_osrm_km": 24.45,
+                    "reduction_osrm_pct": 28.76
+                },
+                {
+                    "hub": "Queens Fulfillment Center",
+                    "rider_id": "truck_qn_01",
+                    "stops_count": 9,
+                    "random_haversine_km": 27.38,
+                    "opt_haversine_km": 15.29,
+                    "reduction_haversine_pct": 44.17,
+                    "random_osrm_km": 44.83,
+                    "opt_osrm_km": 25.26,
+                    "reduction_osrm_pct": 43.65
+                },
+                {
+                    "hub": "Queens Fulfillment Center",
+                    "rider_id": "truck_qn_02",
+                    "stops_count": 8,
+                    "random_haversine_km": 27.34,
+                    "opt_haversine_km": 18.79,
+                    "reduction_haversine_pct": 31.29,
+                    "random_osrm_km": 38.39,
+                    "opt_osrm_km": 29.21,
+                    "reduction_osrm_pct": 23.9
+                }
+            ]
+        },
+        {
+            "set_number": 3,
+            "points_count": 40,
+            "riders_count": 5,
+            "osrm_status": "OK",
+            "timing": {
+                "raw_runs_ms": [
+                    33.4592,
+                    24.4359,
+                    35.4231,
+                    44.551,
+                    34.0365
+                ],
+                "avg_total_ms": 34.381139999999995,
+                "min_total_ms": 24.4359,
+                "max_total_ms": 44.551,
+                "avg_alloc_ms": 0.9172,
+                "avg_route_ms": 33.46394
+            },
+            "haversine": {
+                "before_km": 139.10595408287213,
+                "after_km": 85.87605279935485,
+                "reduction_pct": 38.26572459422237
+            },
+            "osrm": {
+                "before_km": 199.6823,
+                "after_km": 126.77359999999999,
+                "reduction_pct": 36.51234986776495
+            },
+            "voronoi_spatial": {
+                "unzoned_km": 122.34912770443701,
+                "voronoi_km": 74.93800143798087,
+                "savings_pct": 38.75068597218676
+            },
+            "rider_breakdown": [
+                {
+                    "hub": "Brooklyn Distribution Hub",
+                    "rider_id": "van_bk_01",
+                    "stops_count": 7,
+                    "random_haversine_km": 32.26,
+                    "opt_haversine_km": 20.13,
+                    "reduction_haversine_pct": 37.6,
+                    "random_osrm_km": 45.03,
+                    "opt_osrm_km": 29.64,
+                    "reduction_osrm_pct": 34.17
+                },
+                {
+                    "hub": "Brooklyn Distribution Hub",
+                    "rider_id": "van_bk_02",
+                    "stops_count": 7,
+                    "random_haversine_km": 14.7,
+                    "opt_haversine_km": 12.13,
+                    "reduction_haversine_pct": 17.49,
+                    "random_osrm_km": 20.98,
+                    "opt_osrm_km": 17.01,
+                    "reduction_osrm_pct": 18.91
+                },
+                {
+                    "hub": "Brooklyn Distribution Hub",
+                    "rider_id": "van_bk_03",
+                    "stops_count": 6,
+                    "random_haversine_km": 26,
+                    "opt_haversine_km": 16.32,
+                    "reduction_haversine_pct": 37.21,
+                    "random_osrm_km": 33.48,
+                    "opt_osrm_km": 22.12,
+                    "reduction_osrm_pct": 33.94
+                },
+                {
+                    "hub": "Queens Fulfillment Center",
+                    "rider_id": "truck_qn_01",
+                    "stops_count": 10,
+                    "random_haversine_km": 32.94,
+                    "opt_haversine_km": 17.11,
+                    "reduction_haversine_pct": 48.06,
+                    "random_osrm_km": 47.23,
+                    "opt_osrm_km": 25.95,
+                    "reduction_osrm_pct": 45.05
+                },
+                {
+                    "hub": "Queens Fulfillment Center",
+                    "rider_id": "truck_qn_02",
+                    "stops_count": 10,
+                    "random_haversine_km": 33.21,
+                    "opt_haversine_km": 20.18,
+                    "reduction_haversine_pct": 39.23,
+                    "random_osrm_km": 52.96,
+                    "opt_osrm_km": 32.05,
+                    "reduction_osrm_pct": 39.49
+                }
+            ]
+        },
+        {
+            "set_number": 4,
+            "points_count": 45,
+            "riders_count": 5,
+            "osrm_status": "OK",
+            "timing": {
+                "raw_runs_ms": [
+                    110.2903,
+                    57.5925,
+                    50.4269,
+                    104.7983,
+                    45.0238
+                ],
+                "avg_total_ms": 73.62636,
+                "min_total_ms": 45.0238,
+                "max_total_ms": 110.2903,
+                "avg_alloc_ms": 0.9496400000000002,
+                "avg_route_ms": 72.67672
+            },
+            "haversine": {
+                "before_km": 127.07572291069627,
+                "after_km": 85.04881786695167,
+                "reduction_pct": 33.07233205612329
+            },
+            "osrm": {
+                "before_km": 177.4025,
+                "after_km": 126.78190000000001,
+                "reduction_pct": 28.534321669649522
+            },
+            "voronoi_spatial": {
+                "unzoned_km": 118.15241790281306,
+                "voronoi_km": 66.14688504687794,
+                "savings_pct": 44.01563148602897
+            },
+            "rider_breakdown": [
+                {
+                    "hub": "Brooklyn Distribution Hub",
+                    "rider_id": "van_bk_01",
+                    "stops_count": 8,
+                    "random_haversine_km": 22.2,
+                    "opt_haversine_km": 16.37,
+                    "reduction_haversine_pct": 26.26,
+                    "random_osrm_km": 33.27,
+                    "opt_osrm_km": 25.32,
+                    "reduction_osrm_pct": 23.89
+                },
+                {
+                    "hub": "Brooklyn Distribution Hub",
+                    "rider_id": "van_bk_02",
+                    "stops_count": 8,
+                    "random_haversine_km": 19.82,
+                    "opt_haversine_km": 16.3,
+                    "reduction_haversine_pct": 17.76,
+                    "random_osrm_km": 25.22,
+                    "opt_osrm_km": 22.92,
+                    "reduction_osrm_pct": 9.13
+                },
+                {
+                    "hub": "Brooklyn Distribution Hub",
+                    "rider_id": "van_bk_03",
+                    "stops_count": 7,
+                    "random_haversine_km": 17.57,
+                    "opt_haversine_km": 11.54,
+                    "reduction_haversine_pct": 34.31,
+                    "random_osrm_km": 23.35,
+                    "opt_osrm_km": 16.55,
+                    "reduction_osrm_pct": 29.14
+                },
+                {
+                    "hub": "Queens Fulfillment Center",
+                    "rider_id": "truck_qn_01",
+                    "stops_count": 11,
+                    "random_haversine_km": 40.69,
+                    "opt_haversine_km": 22.59,
+                    "reduction_haversine_pct": 44.48,
+                    "random_osrm_km": 55.67,
+                    "opt_osrm_km": 32.16,
+                    "reduction_osrm_pct": 42.24
+                },
+                {
+                    "hub": "Queens Fulfillment Center",
+                    "rider_id": "truck_qn_02",
+                    "stops_count": 11,
+                    "random_haversine_km": 26.8,
+                    "opt_haversine_km": 18.25,
+                    "reduction_haversine_pct": 31.9,
+                    "random_osrm_km": 39.89,
+                    "opt_osrm_km": 29.84,
+                    "reduction_osrm_pct": 25.2
+                }
+            ]
+        },
+        {
+            "set_number": 5,
+            "points_count": 50,
+            "riders_count": 5,
+            "osrm_status": "OK",
+            "timing": {
+                "raw_runs_ms": [
+                    123.6363,
+                    75.0419,
+                    42.4706,
+                    46.2593,
+                    46.0753
+                ],
+                "avg_total_ms": 66.69667999999999,
+                "min_total_ms": 42.4706,
+                "max_total_ms": 123.6363,
+                "avg_alloc_ms": 1.25346,
+                "avg_route_ms": 65.44322
+            },
+            "haversine": {
+                "before_km": 159.96838760850278,
+                "after_km": 86.21921492268017,
+                "reduction_pct": 46.102341711608666
+            },
+            "osrm": {
+                "before_km": 233.1648,
+                "after_km": 142.4681,
+                "reduction_pct": 38.89810983476066
+            },
+            "voronoi_spatial": {
+                "unzoned_km": 127.71417470699821,
+                "voronoi_km": 79.10729797387589,
+                "savings_pct": 38.059108822208806
+            },
+            "rider_breakdown": [
+                {
+                    "hub": "Brooklyn Distribution Hub",
+                    "rider_id": "van_bk_01",
+                    "stops_count": 9,
+                    "random_haversine_km": 28.46,
+                    "opt_haversine_km": 14.06,
+                    "reduction_haversine_pct": 50.6,
+                    "random_osrm_km": 44.13,
+                    "opt_osrm_km": 23.69,
+                    "reduction_osrm_pct": 46.33
+                },
+                {
+                    "hub": "Brooklyn Distribution Hub",
+                    "rider_id": "van_bk_02",
+                    "stops_count": 8,
+                    "random_haversine_km": 16.17,
+                    "opt_haversine_km": 11.36,
+                    "reduction_haversine_pct": 29.79,
+                    "random_osrm_km": 24.15,
+                    "opt_osrm_km": 16.12,
+                    "reduction_osrm_pct": 33.25
+                },
+                {
+                    "hub": "Brooklyn Distribution Hub",
+                    "rider_id": "van_bk_03",
+                    "stops_count": 8,
+                    "random_haversine_km": 29.12,
+                    "opt_haversine_km": 15.01,
+                    "reduction_haversine_pct": 48.44,
+                    "random_osrm_km": 38.29,
+                    "opt_osrm_km": 20.64,
+                    "reduction_osrm_pct": 46.08
+                },
+                {
+                    "hub": "Queens Fulfillment Center",
+                    "rider_id": "truck_qn_01",
+                    "stops_count": 12,
+                    "random_haversine_km": 43.47,
+                    "opt_haversine_km": 21.88,
+                    "reduction_haversine_pct": 49.66,
+                    "random_osrm_km": 64.68,
+                    "opt_osrm_km": 42.89,
+                    "reduction_osrm_pct": 33.68
+                },
+                {
+                    "hub": "Queens Fulfillment Center",
+                    "rider_id": "truck_qn_02",
+                    "stops_count": 11,
+                    "random_haversine_km": 42.75,
+                    "opt_haversine_km": 23.91,
+                    "reduction_haversine_pct": 44.07,
+                    "random_osrm_km": 61.92,
+                    "opt_osrm_km": 39.12,
+                    "reduction_osrm_pct": 36.81
+                }
+            ]
+        }
+    ],
+    "aggregates": {
+        "osrm_reduction_pct": {
+            "avg": 31.74402986493742,
+            "min": 24.55066381554001,
+            "max": 38.89810983476066
+        },
+        "haversine_reduction_pct": {
+            "avg": 35.982969546769375,
+            "min": 28.371642313464214,
+            "max": 46.102341711608666
+        },
+        "voronoi_spatial_savings_pct": {
+            "avg": 40.32912990960456,
+            "min": 36.96552131378772,
+            "max": 44.01563148602897
+        },
+        "dispatch_latency_ms": {
+            "avg": 44.285987999999996,
+            "min": 17.78694,
+            "max": 73.62636
+        }
+    }
+}

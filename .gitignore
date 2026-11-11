@@ -1,11 +1,44 @@
+# Environment files
 .env
-node_modules/
-dist/
-.DS_Store
-.idea/
-.vscode/
-*.log
-vendor/
+.env.*
+!.env.example
 .env.local
 .env.production
 .env.production.local
+
+# Node dependencies & builds
+node_modules/
+dist/
+build/
+.turbo/
+
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+*.egg-info/
+
+# SQLite & Django
+db.sqlite3
+db.sqlite3-journal
+staticfiles/
+media/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE & OS files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
